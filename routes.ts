@@ -1,5 +1,5 @@
 import { createBrowserRouter } from "react-router";
-import { Root } from "./components/Root";
+import Root from "./Root";
 
 export const router = createBrowserRouter(
   [
@@ -10,91 +10,75 @@ export const router = createBrowserRouter(
       children: [
         {
           index: true,
-          lazy: async () => ({ Component: (await import("./components/CriteriaOpsWorkspace")).default }),
+          lazy: async () => ({ Component: (await import("./pages/CriteriaOpsWorkspace")).default }),
         },
         {
           path: "dashboard",
-          lazy: async () => ({ Component: (await import("./components/Dashboard")).Dashboard }),
+          lazy: async () => ({ Component: (await import("./pages/Dashboard")).default }),
         },
         {
           path: "demo",
-          lazy: async () => ({ Component: (await import("./components/PlatformDemo")).PlatformDemo }),
+          lazy: async () => ({ Component: (await import("./pages/PlatformDemo")).default }),
         },
         {
           path: "tasks",
-          lazy: async () => ({ Component: (await import("./components/AllTasks")).AllTasks }),
+          lazy: async () => ({ Component: (await import("./pages/AllTasks")).default }),
         },
         {
           path: "functions",
-          lazy: async () => ({ Component: (await import("./components/FunctionKanban")).FunctionKanban }),
+          lazy: async () => ({ Component: (await import("./pages/FunctionKanban")).default }),
         },
         {
           path: "analytics",
-          lazy: async () => ({ Component: (await import("./components/Analytics")).Analytics }),
+          lazy: async () => ({ Component: (await import("./pages/Analytics")).default }),
         },
         {
           path: "personal",
-          lazy: async () => ({ Component: (await import("./components/PersonalDashboardRoute")).PersonalDashboard }),
-        },
-        {
-          path: "member-views",
-          lazy: async () => ({ Component: (await import("./components/MemberViews")).MemberViews }),
+          lazy: async () => ({ Component: (await import("./pages/PersonalDashboard")).default }),
         },
         {
           path: "successes",
-          lazy: async () => ({ Component: (await import("./components/SuccessesFeed")).SuccessesFeed }),
-        },
-        {
-          path: "settings",
-          lazy: async () => ({ Component: (await import("./components/Settings")).Settings }),
+          lazy: async () => ({ Component: (await import("./pages/SuccessesFeed")).default }),
         },
         {
           path: "reports",
-          lazy: async () => ({ Component: (await import("./components/Reports")).Reports }),
+          lazy: async () => ({ Component: (await import("./pages/Reports")).default }),
         },
         {
           path: "archive",
-          lazy: async () => ({ Component: (await import("./components/Archive")).Archive }),
+          lazy: async () => ({ Component: (await import("./pages/Archive")).default }),
         },
         {
           path: "community-team",
-          lazy: async () => ({ Component: (await import("./components/CommunityTeam")).CommunityTeam }),
+          lazy: async () => ({ Component: (await import("./pages/CommunityTeam")).default }),
         },
         {
           path: "user-management",
-          lazy: async () => ({ Component: (await import("./components/UserManagementRoute")).UserManagementRoute }),
+          lazy: async () => ({ Component: (await import("./pages/UserManagement")).default }),
         },
         {
           path: "data-export",
-          lazy: async () => ({ Component: (await import("./components/DataExport")).DataExport }),
-        },
-        {
-          path: "data-import",
-          lazy: async () => ({ Component: (await import("./components/DataImport")).DataImport }),
+          lazy: async () => ({ Component: (await import("./pages/DataExport")).default }),
         },
         {
           path: "mistakes",
-          lazy: async () => ({ Component: (await import("./components/MistakeLogger")).MistakeLogger }),
+          lazy: async () => ({ Component: (await import("./pages/MistakeLogger")).default }),
         },
         {
           path: "ops",
-          lazy: async () => ({ Component: (await import("./components/OpsCommand")).OpsCommand }),
+          lazy: async () => ({ Component: (await import("./pages/OpsCommand")).default }),
         },
         {
           path: "campaigns",
-          lazy: async () => ({ Component: (await import("./components/CampaignsManager")).CampaignsManager }),
-        },
-        {
-          path: "campaign-watch",
-          lazy: async () => ({ Component: (await import("./components/UpcomingCampaigns")).UpcomingCampaigns }),
+          lazy: async () => ({ Component: (await import("./pages/CampaignsManager")).default }),
         },
         {
           path: "master-tasks",
-          lazy: async () => ({ Component: (await import("./components/MasterCampaignTasks")).MasterCampaignTasks }),
+          lazy: async () => ({ Component: (await import("./pages/MasterCampaignTasks")).default }),
         },
         {
           path: "*",
-          lazy: async () => ({ Component: (await import("./components/NotFound")).NotFound }),
+          lazy: async () => ({ Component: (await import("./pages/NotFound")).default }),
         },
       ],
     },
