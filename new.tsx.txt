@@ -1,0 +1,1697 @@
+import { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
+import { BulkCampaignModal } from "./components/BulkCampaignModal";
+import { ImportExportModal } from "./components/ImportExportModal";
+import { AgentEditModal } from "./components/AgentEditModal";
+import { LoginScreen } from "./components/LoginScreen";
+import { SettingsPanel } from "./components/SettingsPanel";
+import { OfficesView } from "./components/OfficesView";
+import { ReportsView } from "./components/ReportsView";
+
+// ─── MOBILE HOOK ──────────────────────────────────────────────────────────────
+function useIsMobile(){
+  const[isMobile,setIsMobile]=useState(false);
+  useEffect(()=>{
+    const checkMobile=()=>setIsMobile(window.innerWidth<768);
+    checkMobile();
+    window.addEventListener('resize',checkMobile);
+    return()=>window.removeEventListener('resize',checkMobile);
+  },[]);
+  return isMobile;
+}
+
+// ─── TRYGC BRAND PALETTE ──────────────────────────────────────────────────────
+const BRAND = {
+  purple:"#7C3AED", purpleLight:"#A78BFA", purpleDark:"#5B21B6",
+  violet:"#8B5CF6", violetLight:"#C4B5FD",
+  magenta:"#D946EF", pink:"#EC4899",
+  teal:"#14B8A6", green:"#10B981", red:"#EF4444", amber:"#F59E0B",
+  blue:"#3B82F6", indigo:"#6366F1",
+  grad1:"linear-gradient(135deg,#7C3AED 0%,#D946EF 100%)",
+  grad2:"linear-gradient(135deg,#5B21B6 0%,#7C3AED 100%)",
+  grad3:"linear-gradient(135deg,#7C3AED 0%,#3B82F6 100%)",
+  gradGreen:"linear-gradient(135deg,#059669,#14B8A6)",
+  gradAmber:"linear-gradient(135deg,#D97706,#F59E0B)",
+  gradRed:"linear-gradient(135deg,#DC2626,#EF4444)",
+};
+
+const DARK = {
+  bg:"#05080F", surface:"#0C1220", surface2:"#111827", surface3:"#1A2540",
+  border:"#1F2D45", border2:"#2D3F5C", border3:"#3D5070",
+  text:"#F1F5F9", text2:"#94A3B8", text3:"#64748B",
+  topbar:"linear-gradient(180deg,#0C1220 0%,#080F1C 100%)",
+  tabbar:"#080F1C", inputBg:"#080F1C",
+  blockedBg:"#1A0A0F", blockedBorder:"#7F1D1D", blockedText:"#FCA5A5",
+  subtaskDone:"#052015", subtaskTodo:"#0D1829",
+  cardHover:"#131E35",
+};
+const LIGHT = {
+  bg:"#F0F4FF", surface:"#FFFFFF", surface2:"#F5F7FF", surface3:"#EEF2FF",
+  border:"#DDE3F5", border2:"#C7D0EE", border3:"#A5B4D8",
+  text:"#0F172A", text2:"#334155", text3:"#64748B",
+  topbar:"linear-gradient(180deg,#FFFFFF 0%,#F5F0FF 100%)",
+  tabbar:"#FFFFFF", inputBg:"#F5F7FF",
+  blockedBg:"#FFF1F2", blockedBorder:"#FECDD3", blockedText:"#9F1239",
+  subtaskDone:"#ECFDF5", subtaskTodo:"#F5F7FF",
+  cardHover:"#F0EBFF",
+};
+
+const MARKETS=["ALL","EGY","KSA","KW","UAE","QAT","BH","OMAN"];
+const PRIORITIES=["Critical","High","Medium","Low"];
+const STATUSES=["To Do","In Progress","Blocked","Done"];
+const CAMPAIGN_PHASES=["Planning","Briefing","Activation","Live","Post-Campaign","Closed"];
+const SHIFTS=["Morning","Afternoon","Night","Mid"];
+
+const PC={Critical:"#EF4444",High:"#F59E0B",Medium:"#8B5CF6",Low:"#10B981"};
+const SC={"To Do":"#4B6080","In Progress":"#3B82F6","Blocked":"#EF4444","Done":"#10B981"};
+const PHC={Planning:"#8B5CF6",Briefing:"#6366F1",Activation:"#F59E0B",Live:"#10B981","Post-Campaign":"#14B8A6",Closed:"#4B6080"};
+const TC={Channel:"#7C3AED",Function:"#14B8A6",Survey:"#D946EF"};
+const MKC={EGY:"#EF4444",KSA:"#10B981",KW:"#3B82F6",UAE:"#F59E0B",QAT:"#8B5CF6",BH:"#EC4899",OMAN:"#14B8A6",ALL:"#6366F1"};
+
+const SLA_RULES=[
+  {id:"inbound",label:"Inbound Response",mins:120,icon:"📥",color:BRAND.purple},
+  {id:"whatsapp",label:"WA Live Chat",mins:30,icon:"💬",color:BRAND.green},
+  {id:"complaint",label:"Complaint Resolution",mins:1440,icon:"🚨",color:BRAND.red},
+];
+
+const DEPARTMENTS=[
+  {id:"inbound",label:"Inbound",icon:"📥",type:"Channel",tasks:[
+    {title:"Influencer Inbound",subtasks:["Receive new influencer inquiries","Qualify influencer profile","Route to onboarding","Log in system"]},
+    {title:"Office Inbound",subtasks:["Receive office walk-ins","Document request","Escalate if needed"]},
+    {title:"Inquiry Handling",subtasks:["Log inquiry type","Assign to relevant dept","Follow up within SLA (2hr)","Close & tag outcome"]},
+    {title:"Client Inbound",subtasks:["Receive client requests","Create brief ticket","Assign to Key Accounts","Confirm receipt with client"]},
+    {title:"Complaints",subtasks:["Log complaint source","Categorize (Influencer/Client/Office)","Assign owner","Resolve & document","Escalate if unresolved 24hr"]},
+    {title:"Feedback Collection",subtasks:["Collect feedback post-interaction","Tag sentiment","Feed into Quality loop"]},
+    {title:"Referrals",subtasks:["Log referral source","Validate referrer","Assign credit if applicable","Onboard referred lead"]},
+    {title:"Outreach — Sourcing",subtasks:["LinkedIn sourcing","Social media sourcing","Word of Mouth leads","Malls & Booths leads","Referral leads"]},
+    {title:"Reactivation",subtasks:["Pull inactive list","Send reactivation message","Track response rate","Update CRM status"]},
+    {title:"Upselling",subtasks:["Identify eligible influencers","Prepare upsell offer","Send via WA/call","Log outcome"]},
+  ]},
+  {id:"outbound",label:"Outbound",icon:"📤",type:"Channel",tasks:[
+    {title:"Activation Flow",subtasks:["Pull confirmed list","Assign agents","Brief on campaign","Send activation message","Track delivery","Log non-responses"]},
+    {title:"New Influencer Onboarding (50/day/agent)",subtasks:["Pull new influencer batch","Send welcome message","Share app credentials","Confirm profile completion","Follow up D+1 if incomplete"]},
+    {title:"Confirmation — From List",subtasks:["Pull unconfirmed list","Send confirmation message","Log confirmed/not confirmed","Escalate unresponsive after 48hr"]},
+    {title:"Campaign Outbound",subtasks:["Receive campaign brief","Segment target list","Schedule outbound wave","Execute outbound","Track confirmation rate","Report to coordination"]},
+    {title:"Client Outbound",subtasks:["Prepare client update","Send via agreed channel","Log delivery & read","Follow up if no response"]},
+    {title:"Complaints — Outbound",subtasks:["Receive outbound complaint","Classify root cause","Resolve or escalate","Document in log"]},
+    {title:"Escalation Handling",subtasks:["Flag critical case","Notify team lead","Document escalation path","Confirm resolution"]},
+    {title:"App Credentials on Reply",subtasks:["Confirm influencer identity","Send credentials","Log send timestamp","Verify login success"]},
+    {title:"Daily Meeting ≤30 min",subtasks:["Prepare agenda","Share yesterday metrics","Flag blockers","Assign today's actions","Close with owners"]},
+    {title:"Office & Internal Coordination",subtasks:["Share updates with offices","Collect office feedback","Escalate office issues","Log outcomes"]},
+  ]},
+  {id:"whatsapp",label:"WhatsApp",icon:"💬",type:"Channel",tasks:[
+    {title:"WA Live Chat — Influencers",subtasks:["Monitor incoming messages","Respond within 30 min SLA","Use Trygc WA # only","Avoid ban triggers","Log interaction outcome"]},
+    {title:"WA Live Chat — Clients",subtasks:["Monitor client WA","Respond within 30 min","Escalate complex queries","Log & close ticket"]},
+    {title:"SM + Web Chat",subtasks:["Monitor social DMs","Monitor website chat","Triage and route","Log response time"]},
+    {title:"WA Activation",subtasks:["Prepare activation message","Use approved template","Send via Trygc WA #","Track delivery & read","Log confirmations"]},
+    {title:"Onboarding via WA",subtasks:["Send welcome flow","Share app download link","Send credentials","Confirm onboarding complete"]},
+    {title:"Complaints — WA",subtasks:["Receive WA complaint","Log and classify","Resolve within SLA","Escalate if unresolved"]},
+    {title:"System Messages",subtasks:["Monitor system alerts","Relay to relevant team","Confirm action taken"]},
+    {title:"App Credentials on Reply",subtasks:["Verify requester","Send credentials securely","Log send & confirm receipt"]},
+    {title:"Client Escalations",subtasks:["Flag escalation","Notify Key Accounts","Document steps taken","Close with client confirmation"]},
+    {title:"Queue Alignment",subtasks:["Check queue volume","Balance agent load","Flag overflow","Report queue status"]},
+  ]},
+  {id:"quality",label:"Quality",icon:"✅",type:"Function",tasks:[
+    {title:"Inbound Audit",subtasks:["Sample inbound interactions","Score against rubric","Log scores per agent","Share feedback","Track improvement"]},
+    {title:"Outbound Audit",subtasks:["Sample outbound calls/messages","Score tone, accuracy, SLA","Log per agent","Share feedback session","Track trend weekly"]},
+    {title:"WhatsApp Audit",subtasks:["Sample WA chats","Check ban-risk language","Score response time","Log & share results"]},
+    {title:"All Channels Audit",subtasks:["Cross-channel sampling","Compare agent performance","Identify systemic gaps","Report to HOD"]},
+    {title:"Assess",subtasks:["Define assessment criteria","Run assessment session","Score and rank","Document outcomes"]},
+    {title:"Train",subtasks:["Identify training needs","Prepare training material","Conduct session","Track attendance","Assess post-training"]},
+    {title:"Coach",subtasks:["Identify coachee","Set coaching goals","Run 1:1 session","Log notes","Follow up next session"]},
+    {title:"Daily Reporting",subtasks:["Collect daily scores","Calculate team average","Flag outliers","Submit to HOD"]},
+    {title:"Improvement Actions",subtasks:["Log improvement areas","Assign action owner","Set deadline","Track completion","Verify improvement"]},
+    {title:"Quality Loop",subtasks:["Collect quality data","Share with dept leads","Agree on actions","Monitor implementation","Close loop"]},
+  ]},
+  {id:"acquisition",label:"Acquisition",icon:"📊",type:"Function",tasks:[
+    {title:"Inactive List Management",subtasks:["Pull inactive influencers","Segment by last activity","Run reactivation campaign","Log response rate","Archive non-responders"]},
+    {title:"Lookalike Targeting",subtasks:["Define lookalike criteria","Pull matching profiles","Validate list","Hand to outbound"]},
+    {title:"Criteria-based Sourcing",subtasks:["Set criteria (niche, reach, location)","Pull candidates","Validate profiles","Submit to onboarding"]},
+    {title:"New Country Expansion",subtasks:["Identify target market","Research local influencer landscape","Build seed list","Pilot outreach","Report findings"]},
+    {title:"50 New Influencers/Day Target",subtasks:["Set daily agent target","Track vs target AM","Track vs target PM","Log daily result","Escalate if below target"]},
+    {title:"LinkedIn Sourcing",subtasks:["Define search filters","Identify candidates","Send connection/message","Log interested leads"]},
+    {title:"Social Media Sourcing",subtasks:["Monitor IG/TT/YT","Identify potential influencers","DM outreach","Log pipeline"]},
+    {title:"Referrals Pipeline",subtasks:["Collect referral leads","Validate referrals","Assign to onboarding","Track conversion"]},
+  ]},
+  {id:"postcampaign",label:"Post-Campaign",icon:"📋",type:"Survey",tasks:[
+    {title:"Campaign Experience Survey",subtasks:["Design survey","Send to influencers post-campaign","Collect responses","Analyze results","Share with client"]},
+    {title:"Platform Feedback",subtasks:["Collect platform UX feedback","Log common issues","Escalate to product","Track resolution"]},
+    {title:"Content Rating",subtasks:["Define rating criteria","Rate submitted content","Log scores","Share with influencers","Feed into quality loop"]},
+    {title:"NPS Survey",subtasks:["Send NPS to influencers","Send NPS to clients","Compile scores","Segment promoters/passives/detractors","Report to management"]},
+    {title:"Service Satisfaction",subtasks:["Design satisfaction survey","Send post-interaction","Analyze by department","Report trends"]},
+    {title:"Delivery Feedback",subtasks:["Collect delivery experience feedback","Log issues","Report to coordination","Track improvement"]},
+    {title:"Weekly Report",subtasks:["Compile campaign metrics","Add quality scores","Add NPS data","Add market breakdown","Submit to HOD","Share with client"]},
+    {title:"Daily Report",subtasks:["Compile daily campaign stats","Log confirmations","Log complaints","Submit by EOD"]},
+    {title:"Client Update",subtasks:["Prepare client-facing update","Get HOD approval","Send via agreed channel","Log delivery"]},
+    {title:"Lifecycle & Retention",subtasks:["Identify at-risk influencers","Run retention campaign","Track churn rate","Report monthly"]},
+    {title:"Referrals — Post Campaign",subtasks:["Request referrals from satisfied influencers","Log referral leads","Pass to acquisition"]},
+    {title:"Complaints — Post Campaign",subtasks:["Collect post-campaign complaints","Classify","Resolve","Document lessons learned"]},
+  ]},
+  {id:"coordination",label:"Coordination",icon:"🔗",type:"Function",tasks:[
+    {title:"Missing Coverage Resolution",subtasks:["Identify coverage gaps","Pull replacement list","Confirm replacements","Update coverage map","Report to client"]},
+    {title:"Missing Visits Follow-up",subtasks:["Pull missed visit report","Contact influencer","Log reason","Rebook or replace","Update tracker"]},
+    {title:"Campaign Coordination",subtasks:["Receive campaign brief","Align with inbound/outbound","Confirm coverage","Monitor live execution","Close-out report"]},
+    {title:"Internal Office Coordination",subtasks:["Distribute internal updates","Collect office needs","Escalate blockers","Confirm completion"]},
+    {title:"Bulk List Management",subtasks:["Receive bulk list","Clean and validate","Segment by market/campaign","Distribute to agents"]},
+    {title:"Manual List Management",subtasks:["Receive manual requests","Build list per criteria","Validate","Deliver to requester"]},
+    {title:"Daily Meeting Agenda/PMO",subtasks:["Prepare agenda","Collect updates from depts","Run meeting ≤30 min","Log actions & owners","Follow up on open items"]},
+    {title:"Actions & Owners Tracking",subtasks:["Log all action items","Assign owners","Set deadlines","Track weekly","Escalate overdue items"]},
+    {title:"Queue Alignment",subtasks:["Monitor agent queues","Balance workload","Flag spikes","Report to HOD"]},
+    {title:"Escalation Handling",subtasks:["Receive escalation","Classify severity","Assign to owner","Track resolution","Close & document"]},
+  ]},
+  {id:"coverage",label:"Coverage",icon:"📡",type:"Channel",tasks:[
+    {title:"SM Coverage — All Channels",subtasks:["Monitor all social mentions","Assign response owner","Respond within SLA","Log interaction"]},
+    {title:"Key Accounts Coverage",subtasks:["Monitor KA activity","Flag new requests","Ensure SLA met","Report coverage gaps"]},
+    {title:"Email Coverage",subtasks:["Monitor inbox","Triage emails","Assign to owner","Respond within SLA","Log outcomes"]},
+    {title:"Calls Coverage",subtasks:["Monitor call queue","Assign agents","Log call outcomes","Report daily"]},
+    {title:"WA Activation Coverage",subtasks:["Confirm WA messages sent","Track delivery rates","Log read receipts","Flag undelivered"]},
+    {title:"Onboarding Coverage",subtasks:["Ensure all new influencers contacted","Track onboarding completion","Follow up incomplete","Report daily"]},
+    {title:"Campaign Coverage Map",subtasks:["Build coverage map per campaign","Assign influencers per zone","Confirm all zones covered","Monitor live","Report gaps"]},
+    {title:"Sourcing Coverage",subtasks:["LinkedIn","Social Media","Malls & Booths","Word of Mouth","Referrals"]},
+    {title:"Daily Coverage Report",subtasks:["Compile coverage metrics","Highlight gaps","Submit to coordination","Flag for tomorrow"]},
+  ]},
+  {id:"keyaccounts",label:"Key Accounts",icon:"🌟",type:"Function",tasks:[
+    {title:"Client Onboarding",subtasks:["Receive new client brief","Set up client file","Intro call/meeting","Share platform overview","Confirm onboarding complete"]},
+    {title:"Client Issue Resolution",subtasks:["Log client issue","Classify urgency","Assign owner","Resolve within SLA","Confirm resolution with client"]},
+    {title:"Influencer Issue Resolution",subtasks:["Log influencer issue raised by client","Investigate","Coordinate with ops","Resolve & report to client"]},
+    {title:"Escalation Management",subtasks:["Receive escalation","Assess severity","Involve HOD if critical","Document resolution path","Close with client"]},
+    {title:"Upselling",subtasks:["Identify upsell opportunity","Prepare offer","Present to client","Log outcome","Follow up if pending"]},
+    {title:"Lifecycle Management",subtasks:["Map client lifecycle stage","Set touchpoint schedule","Execute touchpoints","Log engagement","Update stage"]},
+    {title:"Retention",subtasks:["Identify at-risk clients","Run retention intervention","Log outcome","Escalate if still at risk"]},
+    {title:"Referrals — KA",subtasks:["Request referral from satisfied client","Log referral","Pass to sales/acquisition","Track conversion"]},
+    {title:"Weekly Client Report",subtasks:["Compile campaign performance","Add quality metrics","Add delivery stats","Get HOD sign-off","Send to client"]},
+    {title:"Client Update Calls",subtasks:["Schedule update call","Prepare talking points","Run call","Log key points","Send follow-up summary"]},
+    {title:"Reactivation — Clients",subtasks:["Identify dormant clients","Prepare reactivation pitch","Outreach via agreed channel","Log outcome"]},
+  ]},
+];
+
+const CAMP_TEMPLATE=[
+  {phase:"Planning",items:["Define campaign objective","Set target market","Define influencer criteria","Agree on budget (EGP)","Set KPIs"]},
+  {phase:"Briefing",items:["Prepare campaign brief","Share with inbound/outbound","Brief quality team","Brief coordination","Confirm all depts aligned"]},
+  {phase:"Activation",items:["Pull confirmed influencer list","Activate via WA/outbound","Track confirmation rate","Log active influencers","Report to client"]},
+  {phase:"Live",items:["Monitor live coverage","Track visits/posts","Flag missing coverage","Daily report to client","Coordinate replacements"]},
+  {phase:"Post-Campaign",items:["Collect campaign feedback","Run NPS","Compile content ratings","Generate weekly report","Share with client"]},
+  {phase:"Closed",items:["Final report delivered","Client sign-off received","Archive campaign files","Log lessons learned","Update influencer scores"]},
+];
+
+const WA_BAN_TRIGGERS=["bulk sending without rotation","using non-registered number","sending promotional without opt-in","ignoring 'stop' replies","high block/report rate","sending identical messages rapidly","using URL shorteners in bulk","no message variation"];
+
+const uid=()=>Math.random().toString(36).slice(2,9);
+function buildInitialTasks(){const o={};DEPARTMENTS.forEach(d=>{o[d.id]=d.tasks.map(t=>({id:uid(),dept:d.id,title:t.title,subarea:t.title,subtasks:t.subtasks.map(s=>({id:uid(),text:s,done:false})),assignee:"",market:"ALL",priority:"Medium",status:"To Do",progress:0,due:"",note:"",campaign:"",slaStart:null}));});return o;}
+function ld(k,fb){try{const s=localStorage.getItem(k);if(s)return JSON.parse(s);}catch(e){console.warn('localStorage read failed:',e);}return typeof fb==="function"?fb():fb;}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn('localStorage write failed:',e);}}
+function fmtM(m){if(m<60)return`${Math.floor(m)}m`;return`${Math.floor(m/60)}h ${Math.floor(m%60)}m`;}
+function getSLA(start,lim){if(!start)return null;const el=(Date.now()-start)/60000,pct=el/lim;if(pct>=1)return{label:"BREACHED",color:BRAND.red,pct:1,el};if(pct>=.75)return{label:"CRITICAL",color:BRAND.red,pct,el};if(pct>=.5)return{label:"WARNING",color:BRAND.amber,pct,el};return{label:"OK",color:BRAND.green,pct,el};}
+
+function Bdg({color,children,sm,pill}){
+  return (
+    <span style={{background:color+"22",color,border:`1.5px solid ${color}55`,borderRadius:pill?24:8,padding:sm?"3px 10px":"5px 14px",fontSize:sm?11:13,fontWeight:800,whiteSpace:"nowrap",letterSpacing:"0.03em",textTransform:"uppercase",boxShadow:`0 2px 8px ${color}15`}}>
+      {children}
+    </span>
+  );
+}
+function Fld({label,children,th}){
+  return (
+    <div>
+      <div style={{fontSize:11,fontWeight:800,color:th.text2,marginBottom:7,textTransform:"uppercase",letterSpacing:"0.1em"}}>{label}</div>
+      {children}
+    </div>
+  );
+}
+function mkI(th){return{width:"100%",background:th.inputBg,border:`2px solid ${th.border2}`,borderRadius:12,padding:"12px 16px",color:th.text,fontSize:14,outline:"none",boxSizing:"border-box",transition:"all .2s",fontWeight:500};}
+function StatCard({label,value,color,icon,sub,isMobile}){return(
+  <div style={{background:`linear-gradient(145deg,${color}20,${color}08)`,border:`2px solid ${color}55`,borderRadius:isMobile?14:20,padding:isMobile?"14px 16px":"20px 24px",minWidth:isMobile?0:110,position:"relative",overflow:"hidden",boxShadow:`0 4px 16px ${color}20`,transition:"all .3s",cursor:"default"}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-4px)";e.currentTarget.style.boxShadow=`0 8px 24px ${color}30`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 4px 16px ${color}20`;}}>
+    <div style={{position:"absolute",top:isMobile?-8:-12,right:isMobile?-8:-12,fontSize:isMobile?40:56,opacity:.12,filter:"blur(1px)"}}>{icon}</div>
+    <div style={{fontSize:isMobile?28:36,fontWeight:900,color,letterSpacing:"-1.5px",textShadow:`0 2px 8px ${color}30`}}>{value}</div>
+    <div style={{fontSize:isMobile?10:12,fontWeight:700,color,opacity:.9,marginTop:3,textTransform:"uppercase",letterSpacing:"0.05em"}}>{label}</div>
+    {sub&&<div style={{fontSize:11,color:"#64748b",marginTop:3,fontWeight:500}}>{sub}</div>}
+  </div>
+);}
+
+export default function App(){
+  const isMobile=useIsMobile();
+  // Initialize dark mode from settings
+  const[dark,setDark]=useState(()=>{
+    const savedSettings = ld("tgc_settings", null);
+    if (savedSettings && savedSettings.theme) {
+      return savedSettings.theme === 'dark';
+    }
+    return true; // default to dark
+  });
+  const th=dark?DARK:LIGHT;
+  const inp=mkI(th);
+  const[tasks,setTasks]=useState(()=>{
+    try{
+      return ld("tgc_t6",buildInitialTasks);
+    }catch(e){
+      console.error('Failed to initialize tasks:',e);
+      return {};
+    }
+  });
+  const[campaigns,setCampaigns]=useState(()=>ld("tgc_c6",[]));
+  const[handovers,setHandovers]=useState(()=>ld("tgc_h6",[]));
+  const[slaTimers,setSlaTimers]=useState(()=>ld("tgc_sla6",{}));
+  const[agents,setAgents]=useState(()=>ld("tgc_ag6",[]));
+  const[dailyLogs,setDailyLogs]=useState(()=>ld("tgc_dl6",[]));
+  const[waBan,setWaBan]=useState(()=>ld("tgc_wb6",{checks:{},notes:""}));
+  const[view,setView]=useState("overview");
+  const[activeTab,setActiveTab]=useState("inbound");
+  const[filters,setFilters]=useState({market:"",priority:"",status:"",search:""});
+  const[modal,setModal]=useState(null);
+  const[campModal,setCampModal]=useState(null);
+  const[bulkCampModal,setBulkCampModal]=useState(null);
+  const[importExportModal,setImportExportModal]=useState(null);
+  const[agentModal,setAgentModal]=useState(null);
+  const[userManual,setUserManual]=useState(false);
+  const[sopModal,setSopModal]=useState(false);
+  const[user,setUser]=useState(()=>ld("tgc_user",null));
+  // Initialize users list
+  const[users,setUsers]=useState(()=>ld("tgc_users",[
+    {id:"admin",username:"admin",fullName:"Administrator",role:"Admin",email:"admin@trygc.com",status:"active",createdAt:new Date().toISOString()}
+  ]));
+  const[settings,setSettings]=useState(()=>ld("tgc_settings",{
+    defaultMarket:'EGY',timezone:'UTC+2',language:'en',dateFormat:'YYYY-MM-DD',
+    defaultPriority:'Medium',defaultStatus:'To Do',autoAssign:'manual',taskViewDefault:'cards',
+    dailyCallTarget:50,qualityThreshold:85,slaResponseTime:24,slaResolutionTime:72,
+    minQualityScore:70,targetQualityScore:85,sessionTimeout:60,auditLogRetention:'90',
+    theme:'dark',accentColor:'#7C3AED',compactMode:false
+  }));
+  const[showSettings,setShowSettings]=useState(false);
+  const[tick,setTick]=useState(0);
+  const[mobileMenuOpen,setMobileMenuOpen]=useState(false);
+
+  useEffect(()=>{
+    try{sv("tgc_t6",tasks);}catch(e){console.error('Failed to save tasks:',e);}
+  },[tasks]);
+  useEffect(()=>{
+    try{sv("tgc_c6",campaigns);}catch(e){console.error('Failed to save campaigns:',e);}
+  },[campaigns]);
+  useEffect(()=>{
+    try{sv("tgc_h6",handovers);}catch(e){console.error('Failed to save handovers:',e);}
+  },[handovers]);
+  useEffect(()=>{
+    try{sv("tgc_sla6",slaTimers);}catch(e){console.error('Failed to save slaTimers:',e);}
+  },[slaTimers]);
+  useEffect(()=>{
+    try{sv("tgc_ag6",agents);}catch(e){console.error('Failed to save agents:',e);}
+  },[agents]);
+  useEffect(()=>{
+    try{sv("tgc_dl6",dailyLogs);}catch(e){console.error('Failed to save dailyLogs:',e);}
+  },[dailyLogs]);
+  useEffect(()=>{
+    try{sv("tgc_wb6",waBan);}catch(e){console.error('Failed to save waBan:',e);}
+  },[waBan]);
+  useEffect(()=>{
+    try{sv("tgc_user",user);}catch(e){console.error('Failed to save user:',e);}
+  },[user]);
+  useEffect(()=>{
+    try{sv("tgc_users",users);}catch(e){console.error('Failed to save users:',e);}
+  },[users]);
+  useEffect(()=>{
+    try{sv("tgc_settings",settings);}catch(e){console.error('Failed to save settings:',e);}
+  },[settings]);
+  // Sync theme with settings
+  useEffect(()=>{
+    if(settings.theme === 'dark') {
+      setDark(true);
+    } else if(settings.theme === 'light') {
+      setDark(false);
+    } else if(settings.theme === 'auto') {
+      // Auto mode - check system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setDark(prefersDark);
+    }
+  },[settings.theme]);
+  useEffect(()=>{const t=setInterval(()=>setTick(x=>x+1),15000);return()=>clearInterval(t);},[]);
+
+  const allTasks=Object.values(tasks||{}).flat().filter(t=>t&&t.id);
+  const stats={total:allTasks.length,done:allTasks.filter(t=>t.status==="Done").length,inprog:allTasks.filter(t=>t.status==="In Progress").length,blocked:allTasks.filter(t=>t.status==="Blocked").length,critical:allTasks.filter(t=>t.priority==="Critical").length};
+
+  function upsertTask(task){setTasks(prev=>{const a=prev[task.dept]||[];const ex=a.find(t=>t.id===task.id);return{...prev,[task.dept]:ex?a.map(t=>t.id===task.id?task:t):[...a,task]};});setModal(null);}
+  function delTask(deptId,id){setTasks(prev=>({...prev,[deptId]:prev[deptId].filter(t=>t.id!==id)}));setModal(null);}
+
+  const dept=DEPARTMENTS.find(d=>d.id===activeTab);
+  const filteredTasks=(tasks[activeTab]||[]).filter(t=>{
+    if(filters.market&&filters.market!=="ALL"&&t.market!==filters.market)return false;
+    if(filters.priority&&t.priority!==filters.priority)return false;
+    if(filters.status&&t.status!==filters.status)return false;
+    if(filters.search&&!t.title.toLowerCase().includes(filters.search.toLowerCase())&&!t.assignee.toLowerCase().includes(filters.search.toLowerCase()))return false;
+    return true;
+  });
+
+  const fileRef=useRef(null);
+  function exportCSV(){
+    try{
+      if(allTasks.length===0)return;
+      const rows=allTasks.map(t=>({ID:t.id,Department:t.dept,Title:t.title,"Sub-area":t.subarea,Assignee:t.assignee,Market:t.market,Priority:t.priority,Status:t.status,Progress:t.progress+"%","Due Date":t.due,Notes:t.note,Subtasks:(t.subtasks||[]).map(s=>(s.done?"[x] ":"[ ] ")+s.text).join(" | ")}));
+      const hdr=Object.keys(rows[0]).join(",");
+      const csv=[hdr,...rows.map(r=>Object.values(r).map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))].join("\n");
+      dl(new Blob([csv],{type:"text/csv"}),`TrygcOps_${dt()}.csv`);
+    }catch(e){
+      console.error('Export CSV failed:',e);
+      alert('Export failed. Please try again.');
+    }
+  }
+  function exportXLSX(){
+    try{
+      const wb=XLSX.utils.book_new();
+      DEPARTMENTS.forEach(d=>{
+        const rows=(tasks[d.id]||[]).map(t=>({Title:t.title,"Sub-area":t.subarea,Assignee:t.assignee,Market:t.market,Priority:t.priority,Status:t.status,Progress:t.progress+"%","Due Date":t.due,Notes:t.note,"Subtasks Done":(t.subtasks||[]).filter(s=>s.done).length+"/"+(t.subtasks||[]).length}));
+        if(rows.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),d.label.slice(0,31));
+      });
+      if(agents.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(agents.map(a=>({Name:a.name,Market:a.market,Dept:a.dept,"Today Target":50,"Today Actual":a.todayCount||0,"Total Onboarded":a.totalCount||0,"Quality Score":a.qualityScore||"—",Notes:a.notes||""}))),  "Agent Performance");
+      if(dailyLogs.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(dailyLogs),"Daily Targets");
+      XLSX.writeFile(wb,`TrygcOps_${dt()}.xlsx`);
+    }catch(e){
+      console.error('Export XLSX failed:',e);
+      alert('Export failed. Please try again.');
+    }
+  }
+  function exportPDF(){
+    try{
+      const w=window.open("","_blank");
+      if(!w){alert('Popup blocked. Please allow popups for export.');return;}
+      const dg=DEPARTMENTS.map(d=>({dept:d,tasks:tasks[d.id]||[]}));
+      w.document.write(`<!DOCTYPE html><html><head><title>TryGC Report</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#1e293b;background:#fff}h1{background:linear-gradient(135deg,#7C3AED,#D946EF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-size:28px}h2{color:#5B21B6;border-left:4px solid #7C3AED;padding-left:10px;margin-top:24px}table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12px}th{background:#7C3AED;color:#fff;padding:8px;text-align:left}td{padding:7px 8px;border-bottom:1px solid #e2e8f0}tr:nth-child(even){background:#F5F0FF}.stat{display:inline-block;margin:0 12px 8px 0;background:#F5F0FF;padding:8px 16px;border-radius:8px;border-left:3px solid #7C3AED}@media print{button{display:none}}</style></head><body><h1>   TryGC OPS COMMAND</h1><p style="color:#64748b;font-size:12px">Generated: ${new Date().toLocaleString()} | Egypt & GCC Regional Operations</p><div style="margin:16px 0">${[["Total",stats.total,"#7C3AED"],["In Progress",stats.inprog,"#3B82F6"],["Blocked",stats.blocked,"#EF4444"],["Done",stats.done,"#10B981"],["Campaigns",campaigns.length,"#D946EF"]].map(([l,v,c])=>`<span class="stat"><b style="color:${c};font-size:20px">${v}</b><br><span style="font-size:10px;color:#64748b">${l}</span></span>`).join("")}</div>${dg.map(({dept:d,tasks:dt})=>dt.length===0?"": `<h2>${d.icon} ${d.label}</h2><table><thead><tr><th>Task</th><th>Assignee</th><th>Market</th><th>Priority</th><th>Status</th><th>Progress</th><th>Due</th></tr></thead><tbody>${dt.map(t=>`<tr><td><b>${t.title}</b></td><td>${t.assignee||"—"}</td><td>${t.market}</td><td style="color:${PC[t.priority]}">${t.priority}</td><td style="color:${SC[t.status]}">${t.status}</td><td>${t.progress||0}%</td><td>${t.due||"—"}</td></tr>`).join("")}</tbody></table>`).join("")}<div style="margin-top:40px;text-align:center"><button onclick="window.print()" style="background:#7C3AED;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / Save PDF</button></div></body></html>`);
+      w.document.close();
+    }catch(e){
+      console.error('Export PDF failed:',e);
+      alert('Export failed. Please try again.');
+    }
+  }
+  function importFile(e){
+    const file=e.target.files[0];
+    if(!file)return;
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{
+        const wb=XLSX.read(ev.target.result,{type:"binary"});
+        let imp=0;
+        DEPARTMENTS.forEach(d=>{
+          const ws=wb.Sheets[d.label.slice(0,31)];
+          if(!ws)return;
+          const rows=XLSX.utils.sheet_to_json(ws);
+          const nt=rows.map(r=>({id:uid(),dept:d.id,title:r.Title||"",subarea:r["Sub-area"]||"",assignee:r.Assignee||"",market:r.Market||"ALL",priority:r.Priority||"Medium",status:r.Status||"To Do",progress:parseInt(r.Progress)||0,due:r["Due Date"]||"",note:r.Notes||"",subtasks:[],campaign:"",slaStart:null}));
+          if(nt.length){
+            setTasks(prev=>({...prev,[d.id]:[...(prev[d.id]||[]),...nt]}));
+            imp+=nt.length;
+          }
+        });
+        alert(`✅ Imported ${imp} tasks!`);
+      }catch(err){
+        console.error('Import failed:',err);
+        alert("Import failed: "+err.message);
+      }
+    };
+    r.onerror=()=>{
+      console.error('File read error');
+      alert('Failed to read file. Please try again.');
+    };
+    r.readAsBinaryString(file);
+    e.target.value="";
+  }
+  function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();}
+  function dt(){return new Date().toISOString().slice(0,10);}
+
+  const VIEWS=[["overview","📊 Overview"],["ops","⚙️ Ops"],["campaigns","🚀 Campaigns"],["agents","👥 Agents"],["offices","🏢 Offices"],["reports","📈 Reports"],["sla","⏱ SLA"],["waban","🛡 WA Shield"],["handover","📋 Handover"]];
+  const banScore=Object.values(waBan.checks).filter(Boolean).length;
+
+  // Show login screen if not authenticated
+  if(!user){
+    return <LoginScreen onLogin={setUser} isMobile={isMobile}/>;
+  }
+
+  return(
+    <div style={{fontFamily:"'Inter',system-ui,sans-serif",background:th.bg,minHeight:"100vh",color:th.text,paddingTop:isMobile?"env(safe-area-inset-top)":0,paddingBottom:isMobile?"env(safe-area-inset-bottom)":0}}>
+      {/* ── TOPBAR ── */}
+      <div style={{background:th.topbar,borderBottom:`2px solid ${th.border2}`,padding:isMobile?"0 16px":"0 24px",position:"sticky",top:0,zIndex:50,backdropFilter:"blur(12px)",boxShadow:"0 4px 20px rgba(0,0,0,.15)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:isMobile?"12px 0":"16px 0",flexWrap:"wrap",gap:isMobile?10:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:isMobile?10:16}}>
+            <div style={{background:BRAND.grad1,borderRadius:isMobile?12:16,padding:isMobile?"8px 14px":"10px 18px",display:"flex",alignItems:"center",gap:isMobile?8:10,boxShadow:"0 4px 16px rgba(124,58,237,.4)"}}>
+              <span style={{fontSize:isMobile?16:20,fontWeight:900,color:"#fff",letterSpacing:"-0.8px"}}>TryGC</span>
+            </div>
+            {!isMobile&&<div>
+              <div style={{fontSize:16,fontWeight:800,color:th.text,letterSpacing:"0.02em"}}>OPS COMMAND CENTER</div>
+              <div style={{fontSize:11,color:th.text3,display:"flex",alignItems:"center",gap:6,marginTop:2,fontWeight:600}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:BRAND.green,display:"inline-block",boxShadow:`0 0 10px ${BRAND.green}`,animation:"pulse 2s infinite"}}/>
+                LIVE · Egypt & GCC Regional Operations
+              </div>
+            </div>}
+          </div>
+          <div style={{display:"flex",gap:isMobile?6:8,flexWrap:"wrap",alignItems:"center"}}>
+            {!isMobile&&[["⬇ CSV","#14B8A6",exportCSV],["⬇ Excel","#10B981",exportXLSX],["⬇ PDF","#F59E0B",exportPDF],["⬆ Import","#8B5CF6",()=>fileRef.current?.click()]].map(([l,c,fn])=>(
+              <button key={l} onClick={fn} style={{background:c+"20",color:c,border:`2px solid ${c}55`,borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:800,cursor:"pointer",transition:"all .2s",boxShadow:`0 2px 8px ${c}20`}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 4px 12px ${c}35`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 2px 8px ${c}20`;}}>{l}</button>
+            ))}
+            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importFile} style={{display:"none"}}/>
+            {!isMobile&&<button onClick={()=>setUserManual(true)} style={{background:BRAND.blue+"20",color:BRAND.blue,border:`2px solid ${BRAND.blue}55`,borderRadius:24,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700,transition:"all .2s",boxShadow:`0 2px 8px ${BRAND.blue}20`}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 4px 12px ${BRAND.blue}35`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 2px 8px ${BRAND.blue}20`;}}>
+              📖 User Manual
+            </button>}
+            {!isMobile&&<button onClick={()=>setSopModal(true)} style={{background:BRAND.teal+"20",color:BRAND.teal,border:`2px solid ${BRAND.teal}55`,borderRadius:24,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700,transition:"all .2s",boxShadow:`0 2px 8px ${BRAND.teal}20`}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 4px 12px ${BRAND.teal}35`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 2px 8px ${BRAND.teal}20`;}}>
+              📋 SOP & Roles
+            </button>}
+            {!isMobile&&<button onClick={()=>setShowSettings(true)} style={{background:BRAND.grad1,border:"none",borderRadius:24,padding:"8px 18px",cursor:"pointer",fontSize:13,color:"#fff",fontWeight:700,transition:"all .2s",boxShadow:`0 2px 8px ${BRAND.purple}44`}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 4px 12px ${BRAND.purple}55`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 2px 8px ${BRAND.purple}44`;}}>
+              ⚙️ Settings
+            </button>}
+            {isMobile?<button onClick={()=>setMobileMenuOpen(!mobileMenuOpen)} style={{background:th.surface2,border:`2px solid ${th.border2}`,borderRadius:10,padding:"8px 12px",cursor:"pointer",fontSize:18,color:th.text2,fontWeight:700,minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>☰</button>:
+            <button onClick={()=>{const newTheme=dark?'light':'dark';setSettings(prev=>({...prev,theme:newTheme}));setDark(!dark);}} style={{background:th.surface2,border:`2px solid ${th.border2}`,borderRadius:24,padding:"8px 18px",cursor:"pointer",fontSize:13,color:th.text2,fontWeight:700,transition:"all .2s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=BRAND.purple} onMouseLeave={e=>e.currentTarget.style.borderColor=th.border2}>
+              {dark?"☀️ Light":"🌙 Dark"}
+            </button>}
+          </div>
+        </div>
+        {/* Nav */}
+        {!isMobile&&<div style={{display:"flex",gap:4,overflowX:"auto",paddingBottom:2}}>
+          {VIEWS.map(([v,l])=>{
+            const isBanAlert=v==="waban"&&banScore>=4;
+            return(
+              <button key={v} onClick={()=>setView(v)} style={{padding:"12px 18px",border:"none",cursor:"pointer",whiteSpace:"nowrap",fontSize:13,fontWeight:view===v?800:600,
+                color:view===v?"#fff":isBanAlert?BRAND.red:th.text3,
+                borderBottom:view===v?`3px solid ${BRAND.purple}`:"3px solid transparent",
+                background:view===v?`${BRAND.purple}25`:"none",
+                transition:"all .2s",position:"relative",borderRadius:"8px 8px 0 0"}}>
+                {l}{isBanAlert&&<span style={{marginLeft:6,background:BRAND.red,color:"#fff",borderRadius:12,fontSize:10,padding:"2px 7px",fontWeight:800,boxShadow:`0 0 10px ${BRAND.red}`}}>!</span>}
+              </button>
+            );
+          })}
+        </div>}
+      </div>
+      
+      {/* ── MOBILE MENU ── */}
+      {isMobile&&mobileMenuOpen&&<div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:100,paddingTop:"env(safe-area-inset-top)"}} onClick={()=>setMobileMenuOpen(false)}>
+        <div style={{background:th.surface,borderRadius:"0 0 24px 24px",padding:"20px 16px",boxShadow:"0 8px 32px rgba(0,0,0,.3)",maxHeight:"80vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <span style={{fontWeight:800,fontSize:16,color:th.text}}>Menu</span>
+            <button onClick={()=>setMobileMenuOpen(false)} style={{background:"none",border:"none",color:th.text3,fontSize:24,cursor:"pointer",minWidth:44,minHeight:44,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+          </div>
+          {VIEWS.map(([v,l])=>{
+            const isBanAlert=v==="waban"&&banScore>=4;
+            return(
+              <button key={v} onClick={()=>{setView(v);setMobileMenuOpen(false);}} style={{width:"100%",padding:"14px 16px",border:`2px solid ${view===v?BRAND.purple+"55":th.border}`,background:view===v?BRAND.purple+"15":th.surface2,cursor:"pointer",whiteSpace:"nowrap",fontSize:15,fontWeight:view===v?800:600,color:view===v?BRAND.purple:th.text,transition:"all .2s",borderRadius:12,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:52}}>
+                <span>{l}</span>
+                {isBanAlert&&<span style={{background:BRAND.red,color:"#fff",borderRadius:12,fontSize:10,padding:"4px 8px",fontWeight:800,boxShadow:`0 0 10px ${BRAND.red}`}}>!</span>}
+              </button>
+            );
+          })}
+          <div style={{borderTop:`1px solid ${th.border2}`,marginTop:12,paddingTop:12,display:"flex",flexDirection:"column",gap:8}}>
+            {[["⬇ CSV","#14B8A6",exportCSV],["⬇ Excel","#10B981",exportXLSX],["⬇ PDF","#F59E0B",exportPDF],["⬆ Import","#8B5CF6",()=>fileRef.current?.click()]].map(([l,c,fn])=>(
+              <button key={l} onClick={()=>{fn();setMobileMenuOpen(false);}} style={{width:"100%",background:c+"20",color:c,border:`2px solid ${c}55`,borderRadius:10,padding:"12px",fontSize:14,fontWeight:700,cursor:"pointer",minHeight:48}}>{l}</button>
+            ))}
+            <button onClick={()=>{setUserManual(true);setMobileMenuOpen(false);}} style={{width:"100%",background:BRAND.blue+"20",color:BRAND.blue,border:`2px solid ${BRAND.blue}55`,borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:800,minHeight:48}}>
+              📖 User Manual
+            </button>
+            <button onClick={()=>{setSopModal(true);setMobileMenuOpen(false);}} style={{width:"100%",background:BRAND.teal+"20",color:BRAND.teal,border:`2px solid ${BRAND.teal}55`,borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:800,minHeight:48}}>
+              📋 SOP & Roles
+            </button>
+            <button onClick={()=>{setShowSettings(true);setMobileMenuOpen(false);}} style={{width:"100%",background:BRAND.grad1,border:"none",borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,color:"#fff",fontWeight:800,minHeight:48,boxShadow:`0 4px 12px ${BRAND.purple}44`}}>
+              ⚙️ Settings
+            </button>
+            <button onClick={()=>{const newTheme=dark?'light':'dark';setSettings(prev=>({...prev,theme:newTheme}));setDark(!dark);setMobileMenuOpen(false);}} style={{width:"100%",background:th.surface2,border:`2px solid ${th.border2}`,borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,color:th.text2,fontWeight:700,minHeight:48}}>
+              {dark?"☀️ Light Mode":"🌙 Dark Mode"}
+            </button>
+          </div>
+        </div>
+      </div>}
+
+      {/* ── STAT BAR ── */}
+      <div style={{padding:isMobile?"14px 16px":"20px 24px",background:th.surface,borderBottom:`2px solid ${th.border2}`,boxShadow:"0 2px 12px rgba(0,0,0,.08)"}}>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2, 1fr)":"repeat(auto-fit, minmax(110px, 1fr))",gap:isMobile?10:14}}>
+          <StatCard label="Total Tasks" value={stats.total} color={BRAND.purple} icon="📋" isMobile={isMobile}/>
+          <StatCard label="In Progress" value={stats.inprog} color={BRAND.blue} icon="⏳" isMobile={isMobile}/>
+          <StatCard label="Blocked" value={stats.blocked} color={BRAND.red} icon="🚫" isMobile={isMobile}/>
+          <StatCard label="Done" value={stats.done} color={BRAND.green} icon="✅" isMobile={isMobile}/>
+          <StatCard label="Critical" value={stats.critical} color={BRAND.magenta} icon="🔥" isMobile={isMobile}/>
+          <StatCard label="Campaigns" value={campaigns.length} color={BRAND.amber} icon="🚀" isMobile={isMobile}/>
+          <StatCard label="Agents" value={agents.length} color={BRAND.teal} icon="👥" isMobile={isMobile}/>
+        </div>
+      </div>
+
+      {/* ── VIEWS ── */}
+      <div style={{minHeight:"calc(100vh - 200px)"}}>
+        {view==="overview"&&<OverviewView th={th} tasks={tasks} campaigns={campaigns} agents={agents} dailyLogs={dailyLogs} isMobile={isMobile}/>}
+        {view==="ops"&&<OpsView th={th} inp={inp} tasks={tasks} setTasks={setTasks} campaigns={campaigns} activeTab={activeTab} setActiveTab={setActiveTab} filters={filters} setFilters={setFilters} filteredTasks={filteredTasks} dept={dept} onUpsert={upsertTask} onDel={delTask} modal={modal} setModal={setModal} onImportExport={setImportExportModal} isMobile={isMobile}/>}
+        {view==="campaigns"&&<CampaignsView th={th} inp={inp} campaigns={campaigns} campModal={campModal} setCampModal={setCampModal}
+          onAdd={()=>setCampModal({mode:"add",camp:{id:uid(),name:`Campaign ${campaigns.length + 1}`,market:"KSA",phase:"Planning",client:"",startDate:"",endDate:"",budget:"",note:"",checklist:CAMP_TEMPLATE.map(p=>({phase:p.phase,items:p.items.map(i=>({id:uid(),text:i,done:false}))}))} })}
+          onEdit={c=>setCampModal({mode:"edit",camp:{...c}})}
+          onAddCamp={c=>{setCampaigns(p=>[...p,c]);setCampModal(null);}}
+          onUpdCamp={c=>{setCampaigns(p=>p.map(x=>x.id===c.id?c:x));setCampModal(null);}}
+          onDelCamp={id=>{setCampaigns(p=>p.filter(c=>c.id!==id));setCampModal(null);}}
+          onRemoveAll={()=>{if(window.confirm("Are you sure you want to remove ALL campaigns? This cannot be undone!")){setCampaigns([]);}}}
+          onBulkUpload={()=>setBulkCampModal({csvData:"",selectedCampaign:""})}
+          bulkCampModal={bulkCampModal}
+          setBulkCampModal={setBulkCampModal}
+          onBulkAdd={(newCamps)=>{setCampaigns(p=>[...p,...newCamps]);}}
+          tasks={tasks}
+          setTasks={setTasks}
+          onImportExport={setImportExportModal}
+          isMobile={isMobile}/>}
+        {view==="agents"&&<AgentsView th={th} inp={inp} agents={agents} setAgents={setAgents} dailyLogs={dailyLogs} setDailyLogs={setDailyLogs} onImportExport={setImportExportModal} agentModal={agentModal} setAgentModal={setAgentModal} isMobile={isMobile}/>}
+        {view==="offices"&&<OfficesView th={th} inp={inp} tasks={tasks} setTasks={setTasks} onTaskEdit={(task)=>setModal({deptId:task.dept,task})} isMobile={isMobile}/>}
+        {view==="reports"&&<ReportsView th={th} inp={inp} tasks={tasks} campaigns={campaigns} agents={agents} isMobile={isMobile}/>}
+        {view==="sla"&&<SLAView th={th} tasks={tasks} slaTimers={slaTimers} setSlaTimers={setSlaTimers} tick={tick} isMobile={isMobile}/>}
+        {view==="waban"&&<WABanView th={th} inp={inp} waBan={waBan} setWaBan={setWaBan} banScore={banScore} isMobile={isMobile}/>}
+        {view==="handover"&&<HandoverView th={th} inp={inp} tasks={tasks} handovers={handovers} setHandovers={setHandovers} isMobile={isMobile}/>}
+      </div>
+
+      {modal&&<TaskModal modal={modal} th={th} inp={inp} dept={DEPARTMENTS.find(d=>d.id===modal.deptId)} campaigns={campaigns} onChange={t=>setModal(p=>({...p,task:t}))} onSave={()=>upsertTask(modal.task)} onDelete={()=>delTask(modal.deptId,modal.task.id)} onClose={()=>setModal(null)}/>}
+      {importExportModal&&<ImportExportModal mode={importExportModal.mode} type={importExportModal.type} th={th} inp={inp} data={importExportModal.data} onClose={()=>setImportExportModal(null)} onImport={importExportModal.onImport} isMobile={isMobile}/>}
+      {agentModal&&<AgentEditModal agent={agentModal} th={th} inp={inp} departments={DEPARTMENTS} onSave={(updatedAgent)=>{setAgents(prev=>prev.map(a=>a.id===updatedAgent.id?updatedAgent:a));setAgentModal(null);}} onDelete={()=>{setAgents(prev=>prev.filter(a=>a.id!==agentModal.id));setAgentModal(null);}} onClose={()=>setAgentModal(null)} isMobile={isMobile}/>}
+      {showSettings&&<SettingsPanel settings={settings} onUpdate={(newSettings)=>{setSettings(newSettings);setShowSettings(false);}} onClose={()=>setShowSettings(false)} th={th} user={user} users={users} onUpdateUsers={setUsers} onLogout={()=>{setUser(null);setShowSettings(false);}} isMobile={isMobile}/>}
+      {userManual&&<UserManualModal th={th} onClose={()=>setUserManual(false)} isMobile={isMobile}/>}
+      {sopModal&&<SOPModal th={th} onClose={()=>setSopModal(false)} isMobile={isMobile}/>}
+    </div>
+  );
+}
+
+// ─── OVERVIEW ─────────────────────────────────────────────────────────────────
+function OverviewView({th,tasks,campaigns,agents,dailyLogs,isMobile}){
+  const allTasks=Object.values(tasks||{}).flat().filter(t=>t&&t.id);
+  const todayLog=dailyLogs.find(l=>l.date===new Date().toISOString().slice(0,10));
+  const todayTotal=todayLog?Object.values(todayLog.counts||{}).reduce((a,b)=>a+b,0):0;
+  const targetTotal=(todayLog?Object.keys(todayLog.counts||{}).length:agents.length)*50;
+  return(
+    <div style={{padding:isMobile?"16px 14px":"24px 28px"}}>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(240px,1fr))",gap:isMobile?12:16,marginBottom:isMobile?18:24}}>
+        {DEPARTMENTS.map(d=>{
+          const dT=tasks[d.id]||[];
+          const done=dT.filter(t=>t.status==="Done").length;
+          const blocked=dT.filter(t=>t.status==="Blocked").length;
+          const inprog=dT.filter(t=>t.status==="In Progress").length;
+          const pct=dT.length?Math.round(done/dT.length*100):0;
+          return(
+            <div key={d.id} style={{background:th.surface,border:`2px solid ${blocked>0?BRAND.red+"55":th.border2}`,borderRadius:20,padding:"20px",boxShadow:blocked>0?`0 6px 24px ${BRAND.red}30`:"0 4px 20px rgba(0,0,0,.1)",position:"relative",overflow:"hidden",transition:"all .3s",cursor:"default"}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-4px)";e.currentTarget.style.boxShadow=blocked>0?`0 10px 32px ${BRAND.red}40`:"0 8px 28px rgba(0,0,0,.15)";}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=blocked>0?`0 6px 24px ${BRAND.red}30`:"0 4px 20px rgba(0,0,0,.1)";}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:blocked>0?BRAND.gradRed:pct===100?BRAND.gradGreen:BRAND.grad2}}/>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                <div><div style={{fontSize:28}}>{d.icon}</div><div style={{fontWeight:800,fontSize:15,color:th.text,marginTop:4,letterSpacing:"0.02em"}}>{d.label}</div></div>
+                <Bdg color={TC[d.type]} sm>{d.type}</Bdg>
+              </div>
+              <div style={{display:"flex",gap:10,fontSize:13,marginBottom:12,fontWeight:700}}>
+                <span style={{color:BRAND.green}}>✅ {done}</span>
+                <span style={{color:BRAND.blue}}>⏳ {inprog}</span>
+                <span style={{color:BRAND.red}}>🚫 {blocked}</span>
+                <span style={{color:th.text3}}>/ {dT.length}</span>
+              </div>
+              <div style={{background:th.border2,borderRadius:8,height:8,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${pct}%`,background:pct===100?BRAND.gradGreen:BRAND.grad2,borderRadius:8,transition:"width .5s",boxShadow:`0 0 10px ${pct===100?BRAND.green:BRAND.purple}40`}}/>
+              </div>
+              <div style={{fontSize:11,color:th.text3,marginTop:6,fontWeight:700}}>{pct}% complete</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Market + Daily target row */}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?14:18,marginBottom:isMobile?18:24}}>
+        <div style={{background:th.surface,border:`2px solid ${th.border2}`,borderRadius:isMobile?16:20,padding:isMobile?"16px":"20px",boxShadow:"0 4px 20px rgba(0,0,0,.1)"}}>
+          <div style={{fontWeight:800,fontSize:isMobile?14:15,color:th.text,marginBottom:isMobile?12:16,letterSpacing:"0.02em"}}>🌍 Market Breakdown</div>
+          <div style={{display:"flex",gap:isMobile?8:10,flexWrap:"wrap"}}>
+            {MARKETS.filter(m=>m!=="ALL").map(m=>{
+              const mC=campaigns.filter(c=>c.market===m);
+              const mT=allTasks.filter(t=>t.market===m);
+              return(
+                <div key={m} style={{background:`${MKC[m]}20`,border:`2px solid ${MKC[m]}55`,borderRadius:12,padding:"12px 16px",textAlign:"center",minWidth:80,boxShadow:`0 2px 10px ${MKC[m]}20`,transition:"all .3s",cursor:"default"}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 4px 14px ${MKC[m]}30`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 2px 10px ${MKC[m]}20`;}}>
+                  <div style={{fontWeight:900,fontSize:18,color:MKC[m],letterSpacing:"-0.5px"}}>{m}</div>
+                  <div style={{fontSize:11,color:th.text3,fontWeight:600,marginTop:2}}>{mT.length} tasks</div>
+                  <div style={{fontSize:11,color:BRAND.amber,fontWeight:600}}>{mC.length} camps</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div style={{background:th.surface,border:`2px solid ${th.border2}`,borderRadius:isMobile?16:20,padding:isMobile?"16px":"20px",boxShadow:"0 4px 20px rgba(0,0,0,.1)"}}>
+          <div style={{fontWeight:800,fontSize:isMobile?14:15,color:th.text,marginBottom:12,letterSpacing:"0.02em"}}>🎯 Today's Onboarding Target</div>
+          {agents.length===0?<div style={{color:th.text3,fontSize:isMobile?12:13,fontWeight:500}}>No agents added yet. Go to 👥 Agents to add your team.</div>:(
+            <>
+              <div style={{fontSize:isMobile?32:40,fontWeight:900,color:todayTotal>=targetTotal?BRAND.green:BRAND.purple,letterSpacing:"-2px",textShadow:`0 2px 12px ${todayTotal>=targetTotal?BRAND.green:BRAND.purple}30`}}>{todayTotal}<span style={{fontSize:isMobile?16:18,color:th.text3,fontWeight:600}}>/{targetTotal}</span></div>
+              <div style={{background:th.border2,borderRadius:8,height:10,overflow:"hidden",margin:"12px 0"}}>
+                <div style={{height:"100%",width:`${Math.min(targetTotal>0?todayTotal/targetTotal*100:0,100)}%`,background:todayTotal>=targetTotal?BRAND.gradGreen:BRAND.grad1,borderRadius:8,transition:"width .5s",boxShadow:`0 0 12px ${todayTotal>=targetTotal?BRAND.green:BRAND.purple}40`}}/>
+              </div>
+              <div style={{fontSize:12,color:th.text3,fontWeight:600}}>Target: 50 new influencers/agent/day · {agents.length} agent{agents.length!==1?"s":""}</div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Blocked panel */}
+      {allTasks.filter(t=>t.status==="Blocked").length>0&&(
+        <div style={{background:th.blockedBg,border:`3px solid ${th.blockedBorder}`,borderRadius:20,padding:"20px",marginBottom:20,boxShadow:`0 6px 24px ${BRAND.red}25`,animation:"pulse 3s infinite"}}>
+          <div style={{fontWeight:800,fontSize:16,color:BRAND.red,marginBottom:14,letterSpacing:"0.02em",textTransform:"uppercase"}}>🚫 Blocked Items — Immediate Action Required</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {allTasks.filter(t=>t.status==="Blocked").map(t=>{
+              const d=DEPARTMENTS.find(x=>x.id===t.dept);
+              return(
+                <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:th.surface+"88",borderRadius:12,padding:"12px 16px",border:`2px solid ${BRAND.red}20`,transition:"all .2s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=BRAND.red+"55";e.currentTarget.style.transform="translateX(4px)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=BRAND.red+"20";e.currentTarget.style.transform="translateX(0)";}}>
+                  <div><span style={{fontWeight:700,fontSize:13,color:th.blockedText}}>{t.title}</span><span style={{marginLeft:10,fontSize:12,color:th.text3,fontWeight:600}}>{d?.icon} {d?.label}</span></div>
+                  <div style={{display:"flex",gap:10}}>{t.assignee&&<span style={{fontSize:12,color:th.text3,fontWeight:600}}>👤 {t.assignee}</span>}{t.due&&<span style={{fontSize:12,color:BRAND.red,fontWeight:700}}>📅 {t.due}</span>}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Campaign pipeline */}
+      {campaigns.length>0&&(
+        <div style={{background:th.surface,border:`2px solid ${th.border2}`,borderRadius:20,padding:"20px",boxShadow:"0 4px 20px rgba(0,0,0,.1)"}}>
+          <div style={{fontWeight:800,fontSize:15,color:th.text,marginBottom:16,letterSpacing:"0.02em"}}>🚀 Campaign Pipeline</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {campaigns.map(c=>{const ai=c.checklist.flatMap(p=>p.items);const done=ai.filter(i=>i.done).length;const pct=ai.length?Math.round(done/ai.length*100):0;return(
+              <div key={c.id} style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",gap:12,alignItems:"center",background:th.surface2,borderRadius:14,padding:"14px 18px",border:`2px solid ${th.border}`,transition:"all .3s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=BRAND.purple+"55";e.currentTarget.style.transform="translateX(4px)";e.currentTarget.style.boxShadow="0 4px 16px rgba(124,58,237,.2)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.transform="translateX(0)";e.currentTarget.style.boxShadow="none";}}>
+                <div><span style={{fontWeight:700,fontSize:14,color:th.text}}>{c.name}</span>{c.client&&<span style={{marginLeft:8,fontSize:12,color:th.text3,fontWeight:600}}>{c.client}</span>}</div>
+                <Bdg color={MKC[c.market]||BRAND.purple} sm>{c.market}</Bdg>
+                <Bdg color={PHC[c.phase]} sm>{c.phase}</Bdg>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:16,fontWeight:900,color:BRAND.purple,letterSpacing:"-0.5px"}}>{pct}%</div>
+                  <div style={{background:th.border2,borderRadius:4,height:6,width:70,overflow:"hidden",marginTop:4}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:BRAND.grad1,borderRadius:4,boxShadow:`0 0 8px ${BRAND.purple}40`}}/>
+                  </div>
+                </div>
+              </div>
+            );})}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// ─── OPS VIEW ────────────  ───────────────────────────────────────────   ────────
+function OpsView({th,inp,tasks,setTasks,campaigns,activeTab,setActiveTab,filters,setFilters,filteredTasks,dept,onUpsert,onDel,modal,setModal,onImportExport,isMobile}){
+  return(
+    <>
+      <div style={{display:"flex",overflowX:"auto",background:th.tabbar,borderBottom:`2px solid ${th.border2}`,padding:isMobile?"0 12px":"0 20px",gap:4,WebkitOverflowScrolling:"touch"}}>
+        {DEPARTMENTS.map(d=>{const cnt=(tasks[d.id]||[]).filter(t=>t.status!=="Done").length;const active=d.id===activeTab;return(
+          <button key={d.id} onClick={()=>setActiveTab(d.id)} style={{padding:isMobile?"12px 14px":"14px 18px",background:active?`${BRAND.purple}25`:"none",border:"none",cursor:"pointer",whiteSpace:"nowrap",fontSize:isMobile?12:13,fontWeight:active?800:600,color:active?BRAND.purpleLight:th.text3,borderBottom:active?`3px solid ${BRAND.purple}`:"3px solid transparent",transition:"all .2s",borderRadius:"10px 10px 0 0",minHeight:48}}>
+            {isMobile?d.icon:`${d.icon} ${d.label}`}{cnt>0&&<span style={{marginLeft:isMobile?4:7,background:active?BRAND.purple:th.surface2,color:active?"#fff":th.text3,borderRadius:12,fontSize:10,padding:"2px 8px",fontWeight:800,boxShadow:active?`0 2px 8px ${BRAND.purple}40`:"none"}}>{cnt}</span>}
+          </button>
+        );})}
+      </div>
+      <div style={{padding:isMobile?"14px 16px":"18px 24px",background:th.surface,borderBottom:`2px solid ${th.border2}`,boxShadow:"0 2px 12px rgba(0,0,0,.05)"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:isMobile?10:12,marginBottom:isMobile?12:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:isMobile?10:14}}>
+            <span style={{fontSize:isMobile?28:32}}>{dept.icon}</span>
+            <div><div style={{fontWeight:900,fontSize:isMobile?16:18,color:th.text,letterSpacing:"0.02em"}}>{dept.label}</div><div style={{fontSize:isMobile?10:11,color:th.text3,fontWeight:600,marginTop:2}}>{dept.type}</div></div>
+            {!isMobile&&<Bdg color={TC[dept.type]}>{dept.type}</Bdg>}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <button onClick={()=>onImportExport({mode:"import",type:"tasks",data:Object.values(tasks).flat(),onImport:(importedTasks)=>{const tasksByDept={};importedTasks.forEach(t=>{const deptId=t.dept||'inbound';if(!tasksByDept[deptId])tasksByDept[deptId]=[];tasksByDept[deptId].push(t);});setTasks(prev=>{const updated={...prev};Object.keys(tasksByDept).forEach(deptId=>{updated[deptId]=[...(prev[deptId]||[]),...tasksByDept[deptId]];});return updated;});}})}
+              style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:isMobile?"9px 14px":"10px 16px",fontWeight:700,fontSize:isMobile?11:12,cursor:"pointer",minHeight:isMobile?44:0}}>
+              📥 Import
+            </button>
+            <button onClick={()=>onImportExport({mode:"export",type:"tasks",data:Object.values(tasks).flat()})}
+              style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:isMobile?"9px 14px":"10px 16px",fontWeight:700,fontSize:isMobile?11:12,cursor:"pointer",minHeight:isMobile?44:0}}>
+              📤 Export
+            </button>
+            <button onClick={()=>setModal({mode:"add",task:{id:uid(),dept:activeTab,title:"",subarea:"",subtasks:[],assignee:"",market:"ALL",priority:"Medium",status:"To Do",progress:0,due:"",note:"",campaign:"",slaStart:null},deptId:activeTab})}
+              style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:12,padding:isMobile?"10px 16px":"12px 24px",fontWeight:800,fontSize:isMobile?13:14,cursor:"pointer",boxShadow:`0 4px 16px ${BRAND.purple}50`,transition:"all .2s",minHeight:isMobile?44:0}} onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 6px 20px ${BRAND.purple}60`;}} onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=`0 4px 16px ${BRAND.purple}50`;}}>
+              {isMobile?"+ Task":"+ Add Task"}
+            </button>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:isMobile?8:10,flexWrap:"wrap"}}>
+          <input value={filters.search} onChange={e=>setFilters(p=>({...p,search:e.target.value}))} placeholder="🔍 Search…" style={{...inp,flex:1,minWidth:isMobile?120:160,fontSize:isMobile?16:14}}/>
+          {[{k:"market",opts:MARKETS},{k:"priority",opts:PRIORITIES},{k:"status",opts:STATUSES}].map(f=>(
+            <select key={f.k} value={filters[f.k]} onChange={e=>setFilters(p=>({...p,[f.k]:e.target.value}))} style={{...inp,width:"auto",minWidth:120}}>
+              <option value="">{f.k[0].toUpperCase()+f.k.slice(1)}</option>
+              {f.opts.map(o=><option key={o}>{o}</option>)}
+            </select>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:isMobile?"16px 14px":"20px 24px",display:"flex",flexDirection:"column",gap:isMobile?10:12}}>
+        {filteredTasks.length===0&&<div style={{textAlign:"center",padding:isMobile?"40px":"60px",color:th.text3,fontSize:isMobile?13:14,fontWeight:500}}>No tasks match. <span style={{color:BRAND.purple,cursor:"pointer",fontWeight:700,textDecoration:"underline"}} onClick={()=>setFilters({market:"",priority:"",status:"",search:""})}>Clear filters</span></div>}
+        {filteredTasks.map(task=>(
+          <TaskCard key={task.id} task={task} th={th} campaigns={campaigns} isMobile={isMobile}
+            onEdit={()=>setModal({mode:"edit",task:{...task,subtasks:[...(task.subtasks||[]).map(s=>({...s}))]},deptId:task.dept})}
+            onToggle={stId=>{const u={...task,subtasks:task.subtasks.map(s=>s.id===stId?{...s,done:!s.done}:s)};const d=u.subtasks.filter(s=>s.done).length;u.progress=u.subtasks.length?Math.round(d/u.subtasks.length*100):0;if(u.progress===100)u.status="Done";else if(u.progress>0&&u.status==="To Do")u.status="In Progress";onUpsert(u);}}
+          />
+        ))}
+      </div>
+      {modal&&<TaskModal modal={modal} th={th} inp={inp} dept={DEPARTMENTS.find(d=>d.id===modal.deptId)} campaigns={campaigns} onChange={t=>setModal(p=>({...p,task:t}))} onSave={()=>onUpsert(modal.task)} onDelete={()=>onDel(modal.deptId,modal.task.id)} onClose={()=>setModal(null)} isMobile={isMobile}/>}
+    </>
+  );
+}
+
+// ─── TASK CARD ────────────────────────────────────────────────────────────────
+function TaskCard({task,th,onEdit,onToggle,campaigns,isMobile}){
+  const[exp,setExp]=useState(false);
+  const pct=task.progress||0;
+  const done=(task.subtasks||[]).filter(s=>s.done).length;
+  const total=(task.subtasks||[]).length;
+  const lc=campaigns.find(c=>c.id===task.campaign);
+  let dueBdg=null;
+  if(task.due&&task.status!=="Done"){const diff=Math.ceil((new Date(task.due)-new Date())/(864e5));if(diff<0)dueBdg={label:`${Math.abs(diff)}d overdue`,color:BRAND.red};else if(diff===0)dueBdg={label:"Due today",color:BRAND.red};else if(diff<=2)dueBdg={label:`${diff}d left`,color:BRAND.amber};else dueBdg={label:`${diff}d`,color:BRAND.green};}
+  return(
+    <div style={{background:th.surface,border:`2px solid ${task.status==="Blocked"?BRAND.red+"55":task.status==="Done"?BRAND.green+"44":th.border2}`,borderRadius:isMobile?14:16,overflow:"hidden",transition:"all .3s",boxShadow:task.status==="Blocked"?`0 4px 20px ${BRAND.red}30`:"0 2px 12px rgba(0,0,0,.1)"}} onMouseEnter={e=>{if(!isMobile){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=task.status==="Blocked"?`0 6px 24px ${BRAND.red}35`:"0 4px 16px rgba(0,0,0,.15)";}}} onMouseLeave={e=>{if(!isMobile){e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow=task.status==="Blocked"?`0 4px 20px ${BRAND.red}30`:"0 2px 12px rgba(0,0,0,.1)";}}} onTouchStart={e=>{if(isMobile)e.currentTarget.style.opacity="0.9";}} onTouchEnd={e=>{if(isMobile)e.currentTarget.style.opacity="1";}}>
+
+      <div style={{height:isMobile?3:4,background:task.status==="Done"?BRAND.gradGreen:task.status==="Blocked"?BRAND.gradRed:task.status==="In Progress"?BRAND.grad3:th.border2,boxShadow:task.status!=="To Do"?`0 2px 8px ${task.status==="Done"?BRAND.green:task.status==="Blocked"?BRAND.red:BRAND.blue}40`:"none"}}/>
+      <div style={{padding:isMobile?"14px 16px":"16px 20px",display:"flex",alignItems:"flex-start",gap:isMobile?10:14,cursor:"pointer"}} onClick={()=>setExp(e=>!e)}>
+        <div style={{flex:1}}>
+          <div style={{display:"flex",alignItems:"center",gap:isMobile?6:8,flexWrap:"wrap",marginBottom:isMobile?6:7}}>
+            <span style={{fontWeight:800,fontSize:isMobile?14:15,color:th.text}}>{task.title||<span style={{color:th.text3,fontStyle:"italic"}}>Untitled</span>}</span>
+            <Bdg color={PC[task.priority]} sm>{task.priority}</Bdg>
+            <Bdg color={SC[task.status]} sm>{task.status}</Bdg>
+            {task.market&&task.market!=="ALL"&&<Bdg color={MKC[task.market]||BRAND.purple} sm>{task.market}</Bdg>}
+            {lc&&!isMobile&&<Bdg color={BRAND.amber} sm>🚀 {lc.name}</Bdg>}
+            {dueBdg&&<Bdg color={dueBdg.color} sm>📅 {dueBdg.label}</Bdg>}
+          </div>
+          <div style={{display:"flex",gap:isMobile?12:16,fontSize:isMobile?11:12,color:th.text3,flexWrap:"wrap",fontWeight:600}}>
+            {task.assignee&&<span>👤 {task.assignee}</span>}
+            {total>0&&<span>☑ {done}/{total} subtasks</span>}
+          </div>
+          <div style={{marginTop:isMobile?8:10,background:th.border2,borderRadius:6,height:6,overflow:"hidden",maxWidth:isMobile?"100%":380}}>
+            <div style={{height:"100%",width:`${pct}%`,background:pct===100?BRAND.gradGreen:BRAND.grad1,borderRadius:6,transition:"width .4s",boxShadow:`0 0 10px ${pct===100?BRAND.green:BRAND.purple}40`}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:isMobile?6:8,alignItems:"center",flexDirection:isMobile?"column":"row"}}>
+          <span style={{fontSize:isMobile?14:16,fontWeight:900,color:pct===100?BRAND.green:BRAND.purple,letterSpacing:"-0.5px"}}>{pct}%</span>
+          <button onClick={e=>{e.stopPropagation();onEdit();}} style={{background:th.surface2,border:`2px solid ${th.border2}`,color:th.text2,borderRadius:10,padding:isMobile?"8px 12px":"6px 14px",fontSize:12,cursor:"pointer",fontWeight:700,transition:"all .2s",minHeight:isMobile?40:0,minWidth:isMobile?60:0}} onMouseEnter={e=>{e.currentTarget.style.borderColor=BRAND.purple;e.currentTarget.style.color=BRAND.purple;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border2;e.currentTarget.style.color=th.text2;}}>Edit</button>
+          <span style={{color:th.text3,fontSize:14,fontWeight:700}}>{exp?"▲":"▼"}</span>
+        </div>
+      </div>
+      {exp&&(task.subtasks||[]).length>0&&(
+        <div style={{borderTop:`2px solid ${th.border2}`,padding:"14px 20px 16px",display:"flex",flexDirection:"column",gap:8}}>
+          {task.subtasks.map(st=>(
+            <div key={st.id} onClick={()=>onToggle(st.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:10,background:st.done?th.subtaskDone:th.subtaskTodo,cursor:"pointer",transition:"all .2s",border:`2px solid ${st.done?BRAND.green+"20":th.border}`}} onMouseEnter={e=>e.currentTarget.style.borderColor=st.done?BRAND.green+"40":BRAND.purple+"40"} onMouseLeave={e=>e.currentTarget.style.borderColor=st.done?BRAND.green+"20":th.border}>
+              <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${st.done?BRAND.green:th.border2}`,background:st.done?BRAND.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s",boxShadow:st.done?`0 2px 8px ${BRAND.green}40`:"none"}}>
+                {st.done&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>✓</span>}
+              </div>
+              <span style={{fontSize:13,color:st.done?BRAND.green:th.text2,textDecoration:st.done?"line-through":"none",fontWeight:600}}>{st.text}</span>
+            </div>
+          ))}
+          {task.note&&<div style={{marginTop:8,fontSize:12,color:th.text3,fontStyle:"italic",paddingLeft:6,fontWeight:500}}>💬 {task.note}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TASK MODAL ───────────────────────────────────────────────────────────────
+function TaskModal({modal,th,inp,dept,campaigns,onChange,onSave,onDelete,onClose,isMobile}){
+  const t=modal.task;const set=(k,v)=>onChange({...t,[k]:v});const isEdit=modal.mode==="edit";
+  const addS=()=>onChange({...t,subtasks:[...(t.subtasks||[]),{id:uid(),text:"",done:false}]});
+  const updS=(id,text)=>onChange({...t,subtasks:t.subtasks.map(s=>s.id===id?{...s,text}:s)});
+  const rmS=id=>onChange({...t,subtasks:t.subtasks.filter(s=>s.id!==id)});
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:300,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:16,paddingTop:isMobile?"env(safe-area-inset-top)":0,paddingBottom:isMobile?"env(safe-area-inset-bottom)":0}}>
+      <div style={{background:th.surface,borderRadius:isMobile?"24px 24px 0 0":18,width:"100%",maxWidth:isMobile?"100%":560,maxHeight:isMobile?"90vh":"92vh",overflowY:"auto",padding:isMobile?20:24,border:`1.5px solid ${BRAND.purple}44`,boxShadow:`0 24px 80px ${BRAND.purple}33`}}>
+        <div style={{height:4,background:BRAND.grad1,borderRadius:isMobile?"24px 24px 0 0":"18px 18px 0 0",margin:isMobile?"-20px -20px 16px":"-24px -24px 20px"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+          <span style={{fontWeight:800,fontSize:15,color:th.text}}>{isEdit?"Edit":"New"} Task · {dept.icon} {dept.label}</span>
+          <button onClick={onClose} style={{background:"none",border:"none",color:th.text3,fontSize:22,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Fld label="Title" th={th}><input value={t.title} onChange={e=>set("title",e.target.value)} placeholder="Task title…" style={{...inp,fontSize:isMobile?16:14}}/></Fld>
+          <Fld label="Sub-area" th={th}><input value={t.subarea} onChange={e=>set("subarea",e.target.value)} placeholder="Sub-area…" style={{...inp,fontSize:isMobile?16:14}}/></Fld>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
+            <Fld label="Assignee" th={th}><input value={t.assignee} onChange={e=>set("assignee",e.target.value)} placeholder="Name…" style={{...inp,fontSize:isMobile?16:14}}/></Fld>
+            <Fld label="Market" th={th}><select value={t.market} onChange={e=>set("market",e.target.value)} style={{...inp,fontSize:isMobile?16:14}}>{MARKETS.map(m=><option key={m}>{m}</option>)}</select></Fld>
+            <Fld label="Priority" th={th}><select value={t.priority} onChange={e=>set("priority",e.target.value)} style={{...inp,fontSize:isMobile?16:14}}>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select></Fld>
+            <Fld label="Status" th={th}><select value={t.status} onChange={e=>set("status",e.target.value)} style={{...inp,fontSize:isMobile?16:14}}>{STATUSES.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          </div>
+          <Fld label={`Progress: ${t.progress||0}%`} th={th}><input type="range" min={0} max={100} value={t.progress||0} onChange={e=>set("progress",Number(e.target.value))} style={{width:"100%",accentColor:BRAND.purple}}/></Fld>
+          <Fld label="Due Date" th={th}><input type="date" value={t.due} onChange={e=>set("due",e.target.value)} style={inp}/></Fld>
+          {campaigns.length>0&&<Fld label="Link to Campaign" th={th}><select value={t.campaign||""} onChange={e=>set("campaign",e.target.value)} style={inp}><option value="">— No campaign —</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name} ({c.market})</option>)}</select></Fld>}
+          <Fld label="Notes" th={th}><textarea value={t.note} onChange={e=>set("note",e.target.value)} rows={2} style={{...inp,resize:"vertical"}}/></Fld>
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{fontSize:10,fontWeight:700,color:th.text3,textTransform:"uppercase",letterSpacing:"0.08em"}}>Subtasks</div>
+              <button onClick={addS} style={{background:`${BRAND.purple}18`,border:`1px solid ${BRAND.purple}44`,color:BRAND.purple,borderRadius:7,padding:"3px 10px",fontSize:11,cursor:"pointer",fontWeight:700}}>+ Add</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(t.subtasks||[]).map(st=>(
+                <div key={st.id} style={{display:"flex",gap:7,alignItems:"center"}}>
+                  <input value={st.text} onChange={e=>updS(st.id,e.target.value)} placeholder="Subtask…" style={{...inp,flex:1,padding:"6px 10px",fontSize:12}}/>
+                  <button onClick={()=>rmS(st.id)} style={{background:"none",border:"none",color:BRAND.red,cursor:"pointer",fontSize:18,padding:"0 4px"}}>×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:20,justifyContent:"flex-end"}}>
+          {isEdit&&<button onClick={onDelete} style={{background:`${BRAND.red}18`,color:BRAND.red,border:`1px solid ${BRAND.red}44`,borderRadius:9,padding:"8px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Delete</button>}
+          <button onClick={onClose} style={{background:th.surface2,color:th.text3,border:`1px solid ${th.border}`,borderRadius:9,padding:"8px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onSave} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:9,padding:"8px 22px",fontWeight:800,fontSize:12,cursor:"pointer",boxShadow:`0 4px 14px ${BRAND.purple}44`}}>{isEdit?"Save Changes":"Add Task"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── AGENTS VIEW ──────────────────────────────────────────────────────────────
+function AgentsView({th,inp,agents,setAgents,dailyLogs,setDailyLogs,onImportExport,agentModal,setAgentModal,isMobile}){
+  const today=new Date().toISOString().slice(0,10);
+  const[newAgent,setNewAgent]=useState({name:"",market:"KSA",dept:"outbound",qualityScore:""});
+  const[logModal,setLogModal]=useState(null);
+  const[counts,setCounts]=useState({});
+
+  function addAgent(){if(!newAgent.name.trim())return;setAgents(p=>[...p,{id:uid(),...newAgent,todayCount:0,totalCount:0,notes:""}]);setNewAgent({name:"",market:"KSA",dept:"outbound",qualityScore:""});}
+  function delAgent(id){setAgents(p=>p.filter(a=>a.id!==id));}
+  function saveLog(){
+    const entry={id:uid(),date:today,counts:{...counts},total:Object.values(counts).reduce((a,b)=>a+Number(b||0),0)};
+    setDailyLogs(p=>{const ex=p.findIndex(l=>l.date===today);return ex>=0?p.map((l,i)=>i===ex?entry:l):[entry,...p];});
+    setAgents(p=>p.map(a=>({...a,todayCount:Number(counts[a.id]||0),totalCount:(a.totalCount||0)+Number(counts[a.id]||0)})));
+    setLogModal(null);
+  }
+
+  const todayLog=dailyLogs.find(l=>l.date===today);
+  const target=agents.length*50;
+  const actual=todayLog?todayLog.total:0;
+  const pct=target>0?Math.min(Math.round(actual/target*100),100):0;
+
+  return(
+    <div style={{padding:isMobile?"14px 16px":"16px 20px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,flexWrap:"wrap",gap:8}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:16,color:th.text}}>👥 Agent Performance</div>
+          <div style={{fontSize:12,color:th.text3,marginTop:2}}>Track agent activity, daily onboarding targets (50/agent/day), and quality scores.</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>onImportExport({mode:"import",type:"agents",data:agents,onImport:(importedAgents)=>{setAgents(prev=>[...prev,...importedAgents]);}})} style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:"9px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>📥 Import</button>
+          <button onClick={()=>onImportExport({mode:"export",type:"agents",data:agents})} style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:"9px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>📤 Export</button>
+        </div>
+      </div>
+      <div style={{marginBottom:18}}></div>
+
+      {/* Today's summary */}
+      <div style={{background:th.surface,border:`1.5px solid ${BRAND.purple}44`,borderRadius:16,padding:"18px",marginBottom:20,position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:BRAND.grad1}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:13,color:th.text2,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>📅 Today · {today}</div>
+            <div style={{fontSize:36,fontWeight:900,color:actual>=target?BRAND.green:BRAND.purple,letterSpacing:"-1px"}}>{actual}<span style={{fontSize:16,color:th.text3,fontWeight:400}}>/{target}</span></div>
+            <div style={{fontSize:12,color:th.text3,marginTop:2}}>Influencers onboarded · Target: 50/agent/day</div>
+          </div>
+          <div style={{display:"flex",flex:1,flexDirection:"column",gap:8,maxWidth:320}}>
+            <div style={{background:th.border,borderRadius:8,height:12,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${pct}%`,background:pct>=100?BRAND.gradGreen:BRAND.grad1,borderRadius:8,transition:"width .6s",position:"relative"}}>
+                {pct>10&&<span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#fff",fontWeight:700}}>{pct}%</span>}
+              </div>
+            </div>
+            <button onClick={()=>{const c={};agents.forEach(a=>{c[a.id]=a.todayCount||0;});setCounts(c);setLogModal(true);}} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:10,padding:"9px 20px",fontWeight:800,fontSize:12,cursor:"pointer",boxShadow:`0 4px 14px ${BRAND.purple}44`,alignSelf:"flex-start"}}>
+              📝 Log Today's Counts
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Add agent */}
+      <div style={{background:th.surface,border:`1.5px solid ${th.border}`,borderRadius:16,padding:"16px",marginBottom:20}}>
+        <div style={{fontWeight:700,fontSize:13,color:th.text,marginBottom:12}}>➕ Add Agent</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
+          <div style={{flex:2,minWidth:140}}><Fld label="Name" th={th}><input value={newAgent.name} onChange={e=>setNewAgent(p=>({...p,name:e.target.value}))} placeholder="Agent name…" style={inp}/></Fld></div>
+          <div style={{flex:1,minWidth:100}}><Fld label="Market" th={th}><select value={newAgent.market} onChange={e=>setNewAgent(p=>({...p,market:e.target.value}))} style={inp}>{MARKETS.filter(m=>m!=="ALL").map(m=><option key={m}>{m}</option>)}</select></Fld></div>
+          <div style={{flex:1,minWidth:120}}><Fld label="Department" th={th}><select value={newAgent.dept} onChange={e=>setNewAgent(p=>({...p,dept:e.target.value}))} style={inp}>{DEPARTMENTS.map(d=><option key={d.id} value={d.id}>{d.label}</option>)}</select></Fld></div>
+          <div style={{flex:1,minWidth:100}}><Fld label="Quality Score" th={th}><input value={newAgent.qualityScore} onChange={e=>setNewAgent(p=>({...p,qualityScore:e.target.value}))} placeholder="0-100" style={inp}/></Fld></div>
+          <button onClick={addAgent} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:10,padding:"9px 18px",fontWeight:700,fontSize:12,cursor:"pointer",height:38,alignSelf:"flex-end"}}>Add</button>
+        </div>
+      </div>
+
+      {/* Agent list */}
+      {agents.length===0&&<div style={{textAlign:"center",padding:isMobile?"32px":"48px",color:th.text3,fontSize:isMobile?12:13}}>No agents added yet. Add your first agent above.</div>}
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(240px,1fr))",gap:12}}>
+        {agents.map(a=>{
+          const cnt=a.todayCount||0;const tgt=50;const p=Math.min(Math.round(cnt/tgt*100),100);
+          const qs=Number(a.qualityScore)||0;const qColor=qs>=85?BRAND.green:qs>=70?BRAND.amber:BRAND.red;
+          const d=DEPARTMENTS.find(x=>x.id===a.dept);
+          return(
+            <div key={a.id} onClick={()=>setAgentModal(a)} style={{background:th.surface,border:`1.5px solid ${p>=100?BRAND.green+"55":th.border}`,borderRadius:16,padding:"16px",position:"relative",overflow:"hidden",cursor:"pointer",transition:"all .2s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=BRAND.purple;e.currentTarget.style.boxShadow=`0 6px 20px ${BRAND.purple}33`;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=p>=100?BRAND.green+"55":th.border;e.currentTarget.style.boxShadow="none";}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:p>=100?BRAND.gradGreen:BRAND.grad1}}/>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                <div>
+                  <div style={{fontWeight:800,fontSize:14,color:th.text}}>{a.name}</div>
+                  <div style={{fontSize:11,color:th.text3}}>{d?.icon} {d?.label} · {a.market}</div>
+                </div>
+                <div style={{fontSize:11,color:BRAND.purple,fontWeight:700}}>✏️</div>
+              </div>
+              <div style={{display:"flex",gap:10,marginBottom:10}}>
+                <div style={{flex:1,background:th.surface2,borderRadius:10,padding:"8px",textAlign:"center"}}>
+                  <div style={{fontSize:20,fontWeight:900,color:p>=100?BRAND.green:BRAND.purple}}>{cnt}</div>
+                  <div style={{fontSize:9,color:th.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>Today</div>
+                </div>
+                <div style={{flex:1,background:th.surface2,borderRadius:10,padding:"8px",textAlign:"center"}}>
+                  <div style={{fontSize:20,fontWeight:900,color:th.text2}}>{a.totalCount||0}</div>
+                  <div style={{fontSize:9,color:th.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>Total</div>
+                </div>
+                {a.qualityScore&&<div style={{flex:1,background:`${qColor}15`,borderRadius:10,padding:"8px",textAlign:"center",border:`1px solid ${qColor}33`}}>
+                  <div style={{fontSize:20,fontWeight:900,color:qColor}}>{a.qualityScore}</div>
+                  <div style={{fontSize:9,color:th.text3,textTransform:"uppercase",letterSpacing:"0.05em"}}>Quality</div>
+                </div>}
+              </div>
+              <div style={{background:th.border,borderRadius:5,height:6,overflow:"hidden",marginBottom:4}}>
+                <div style={{height:"100%",width:`${p}%`,background:p>=100?BRAND.gradGreen:BRAND.grad1,borderRadius:5,transition:"width .5s"}}/>
+              </div>
+              <div style={{fontSize:10,color:th.text3,fontWeight:600}}>{cnt}/{tgt} target · {p}%{p>=100?" 🎯":""}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Daily log history */}
+      {dailyLogs.length>0&&(
+        <div style={{marginTop:24}}>
+          <div style={{fontWeight:700,fontSize:13,color:th.text,marginBottom:10}}>📅 Daily Log History</div>
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            {dailyLogs.slice(0,10).map(l=>(
+              <div key={l.id} style={{background:th.surface,border:`1.5px solid ${th.border}`,borderRadius:12,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontWeight:600,fontSize:12,color:th.text}}>📅 {l.date}</span>
+                <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                  <span style={{fontSize:13,fontWeight:800,color:BRAND.purple}}>{l.total} onboarded</span>
+                  <span style={{fontSize:11,color:th.text3}}>/ {agents.length*50} target</span>
+                  <Bdg color={l.total>=(agents.length*50)?BRAND.green:BRAND.amber} sm>{l.total>=(agents.length*50)?"✅ Met":"⚠ Below"}</Bdg>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Log modal */}
+      {logModal&&(
+        <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:th.surface,borderRadius:18,width:"100%",maxWidth:480,maxHeight:"85vh",overflowY:"auto",padding:24,border:`1.5px solid ${BRAND.purple}44`,boxShadow:`0 24px 80px ${BRAND.purple}33`}}>
+            <div style={{height:4,background:BRAND.grad1,borderRadius:"18px 18px 0 0",margin:"-24px -24px 18px"}}/>
+            <div style={{fontWeight:800,fontSize:15,color:th.text,marginBottom:16}}>📝 Log Today's Counts · {today}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {agents.map(a=>(
+                <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,background:th.surface2,borderRadius:10,padding:"10px 14px"}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:600,fontSize:13,color:th.text}}>{a.name}</div>
+                    <div style={{fontSize:10,color:th.text3}}>{a.market}</div>
+                  </div>
+                  <input type="number" min={0} value={counts[a.id]||""} onChange={e=>setCounts(p=>({...p,[a.id]:e.target.value}))} placeholder="0"
+                    style={{...inp,width:80,textAlign:"center",padding:"7px 10px"}}/>
+                  <div style={{fontSize:11,color:th.text3,width:40}}>/ 50</div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:18,justifyContent:"flex-end"}}>
+              <button onClick={()=>setLogModal(null)} style={{background:th.surface2,color:th.text3,border:`1px solid ${th.border}`,borderRadius:9,padding:"8px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
+              <button onClick={saveLog} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:9,padding:"8px 22px",fontWeight:800,fontSize:12,cursor:"pointer"}}>Save Log</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SLA VIEW ─────────────────────────────────────────────────────────────────
+function SLAView({th,tasks,slaTimers,setSlaTimers,tick,isMobile}){
+  const allTasks=Object.values(tasks||{}).flat().filter(t=>t&&t.id);
+  const start=id=>setSlaTimers(p=>({...p,[id]:Date.now()}));
+  const stop=id=>setSlaTimers(p=>{const n={...p};delete n[id];return n;});
+  return(
+    <div style={{padding:isMobile?"14px 16px":"16px 20px"}}>
+      <div style={{fontWeight:800,fontSize:isMobile?15:16,color:th.text,marginBottom:4}}>⏱ SLA Monitor</div>
+      <div style={{fontSize:isMobile?11:12,color:th.text3,marginBottom:isMobile?16:20}}>Real-time breach tracking. Start timers when tickets open — monitor risk instantly.</div>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(260px,1fr))",gap:isMobile?12:14,marginBottom:isMobile?20:28}}>
+        {SLA_RULES.map(rule=>{
+          const tk=`sla_${rule.id}`;const s=slaTimers[tk];const st=getSLA(s,rule.mins);const active=!!s;
+          return(
+            <div key={rule.id} style={{background:th.surface,border:`1.5px solid ${active&&st?st.color+"55":th.border}`,borderRadius:16,padding:"18px",position:"relative",overflow:"hidden",boxShadow:"0 2px 12px #00000018"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:active&&st?`linear-gradient(90deg,${st.color},${st.color}88)`:th.border}}/>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+                <div>
+                  <div style={{fontSize:24,marginBottom:4}}>{rule.icon}</div>
+                  <div style={{fontWeight:800,fontSize:14,color:th.text}}>{rule.label}</div>
+                  <div style={{fontSize:11,color:th.text3}}>Limit: <b>{fmtM(rule.mins)}</b></div>
+                </div>
+                {active&&st&&<Bdg color={st.color} sm pill>{st.label}</Bdg>}
+              </div>
+              {active&&st?(
+                <>
+                  <div style={{background:th.border,borderRadius:6,height:8,overflow:"hidden",marginBottom:8}}>
+                    <div style={{height:"100%",width:`${Math.min(st.pct*100,100)}%`,background:`linear-gradient(90deg,${rule.color},${st.color})`,borderRadius:6,transition:"width 1s"}}/>
+                  </div>
+                  <div style={{fontSize:13,fontWeight:700,color:st.color,marginBottom:12}}>
+                    {fmtM(st.el)} elapsed{st.pct>=1&&<span> · Breached by {fmtM(st.el-rule.mins)}</span>}
+                  </div>
+                </>
+              ):<div style={{fontSize:12,color:th.text3,marginBottom:12}}>Timer not running</div>}
+              {!active?<button onClick={()=>start(tk)} style={{background:BRAND.gradGreen,color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>▶ Start Timer</button>
+              :<button onClick={()=>stop(tk)} style={{background:BRAND.gradRed,color:"#fff",border:"none",borderRadius:9,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>■ Reset</button>}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{fontWeight:700,fontSize:13,color:th.text,marginBottom:12}}>📅 Task Due Countdown</div>
+      <div style={{display:"flex",flexDirection:"column",gap:7}}>
+        {allTasks.filter(t=>t.due&&t.status!=="Done").length===0&&<div style={{color:th.text3,fontSize:12,padding:"16px 0"}}>No pending tasks with due dates.</div>}
+        {allTasks.filter(t=>t.due&&t.status!=="Done").sort((a,b)=>new Date(a.due)-new Date(b.due)).map(t=>{
+          const diff=Math.ceil((new Date(t.due)-new Date())/864e5);
+          const color=diff<0?BRAND.red:diff===0?BRAND.red:diff<=2?BRAND.amber:BRAND.green;
+          const label=diff<0?`${Math.abs(diff)}d overdue`:diff===0?"Due today":`${diff}d remaining`;
+          const d=DEPARTMENTS.find(x=>x.id===t.dept);
+          return(
+            <div key={t.id} style={{background:th.surface,border:`1.5px solid ${color}33`,borderRadius:12,padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr auto auto",gap:10,alignItems:"center"}}>
+              <div><span style={{fontWeight:600,fontSize:13,color:th.text}}>{t.title}</span><span style={{marginLeft:8,fontSize:11,color:th.text3}}>{d?.icon} {d?.label}</span>{t.assignee&&<span style={{marginLeft:8,fontSize:11,color:th.text3}}>👤 {t.assignee}</span>}</div>
+              <Bdg color={SC[t.status]} sm>{t.status}</Bdg>
+              <div style={{textAlign:"right"}}><div style={{fontWeight:800,fontSize:13,color}}>{label}</div><div style={{fontSize:10,color:th.text3}}>📅 {t.due}</div></div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── WA BAN SHIELD ────────────────────────────────────────────────────────────
+function WABanView({th,inp,waBan,setWaBan,banScore,isMobile}){
+  const toggle=k=>setWaBan(p=>({...p,checks:{...p.checks,[k]:!p.checks[k]}}));
+  const riskColor=banScore<=2?BRAND.green:banScore<=4?BRAND.amber:BRAND.red;
+  const riskLabel=banScore<=2?"LOW RISK":banScore<=4?"MODERATE":"HIGH RISK 🚨";
+  const riskPct=Math.round(banScore/WA_BAN_TRIGGERS.length*100);
+  return(
+    <div style={{padding:isMobile?"14px 16px":"16px 20px"}}>
+      <div style={{fontWeight:800,fontSize:isMobile?15:16,color:th.text,marginBottom:4}}>🛡 WhatsApp Ban Shield</div>
+      <div style={{fontSize:isMobile?11:12,color:th.text3,marginBottom:isMobile?16:20}}>Monitor ban risk factors across your WA operations. Use Trygc WA # only — avoid account bans.</div>
+      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:isMobile?12:14,marginBottom:isMobile?16:20}}>
+        {/* Risk gauge */}
+        <div style={{background:th.surface,border:`1.5px solid ${riskColor}55`,borderRadius:16,padding:"20px",position:"relative",overflow:"hidden"}}>
+          <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:`linear-gradient(90deg,${BRAND.green},${BRAND.amber},${BRAND.red})`}}/>
+          <div style={{fontWeight:700,fontSize:12,color:th.text3,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Current Risk Level</div>
+          <div style={{fontSize:48,fontWeight:900,color:riskColor,letterSpacing:"-2px"}}>{riskPct}%</div>
+          <div style={{fontWeight:700,fontSize:14,color:riskColor,marginBottom:12}}>{riskLabel}</div>
+          <div style={{background:th.border,borderRadius:8,height:12,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${riskPct}%`,background:`linear-gradient(90deg,${BRAND.green},${riskColor})`,borderRadius:8,transition:"width .6s"}}/>
+          </div>
+          <div style={{fontSize:11,color:th.text3,marginTop:8}}>{banScore} of {WA_BAN_TRIGGERS.length} risk factors active</div>
+        </div>
+        {/* Notes */}
+        <div style={{background:th.surface,border:`1.5px solid ${th.border}`,borderRadius:16,padding:"20px"}}>
+          <div style={{fontWeight:700,fontSize:12,color:th.text3,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Operations Notes</div>
+          <textarea value={waBan.notes||""} onChange={e=>setWaBan(p=>({...p,notes:e.target.value}))} placeholder="Add WA ops notes, known issues, or safe messaging guidelines for your team…" rows={5} style={{...inp,resize:"none",height:"100%",minHeight:120}}/>
+        </div>
+      </div>
+      <div style={{fontWeight:700,fontSize:13,color:th.text,marginBottom:12}}>⚠️ Ban Risk Checklist</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {WA_BAN_TRIGGERS.map((trigger,i)=>{
+          const active=!!waBan.checks[trigger];
+          return(
+            <div key={i} onClick={()=>toggle(trigger)} style={{display:"flex",alignItems:"center",gap:12,background:active?`${BRAND.red}12`:th.surface,border:`1.5px solid ${active?BRAND.red+"44":th.border}`,borderRadius:12,padding:"12px 16px",cursor:"pointer",transition:"all .2s"}}>
+              <div style={{width:20,height:20,borderRadius:6,border:`2px solid ${active?BRAND.red:th.border2}`,background:active?BRAND.red:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .2s"}}>
+                {active&&<span style={{color:"#fff",fontSize:12,fontWeight:900}}>!</span>}
+              </div>
+              <span style={{fontSize:13,fontWeight:active?700:500,color:active?BRAND.red:th.text2,flex:1}}>{trigger}</span>
+              {active&&<Bdg color={BRAND.red} sm pill>ACTIVE RISK</Bdg>}
+            </div>
+          );
+        })}
+      </div>
+      {banScore>=4&&(
+        <div style={{background:`${BRAND.red}18`,border:`1.5px solid ${BRAND.red}55`,borderRadius:14,padding:"14px 18px",marginTop:16}}>
+          <div style={{fontWeight:800,fontSize:13,color:BRAND.red,marginBottom:6}}>🚨 High Ban Risk Detected</div>
+          <div style={{fontSize:12,color:th.text2}}>Multiple risk factors are active. Immediate action required: rotate WA numbers, reduce send frequency, vary message templates, and ensure opt-in compliance. Use only registered Trygc WA numbers.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── HANDOVER VIEW ────────────────────────────────────────────────────────────
+function HandoverView({th,inp,tasks,handovers,setHandovers,isMobile}){
+  const today=new Date().toISOString().slice(0,10);
+  const[form,setForm]=useState({date:today,shift:"Morning",outgoing:"",incoming:"",notes:"",deptNotes:{}});
+  const[saved,setSaved]=useState(false);
+  const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const setDN=(id,v)=>setForm(p=>({...p,deptNotes:{...p.deptNotes,[id]:v}}));
+  function save(){
+    const allT=Object.values(tasks||{}).flat().filter(t=>t&&t.id);
+    const h={id:uid(),...form,openCount:allT.filter(t=>t.status!=="Done").length,blockedCount:allT.filter(t=>t.status==="Blocked").length,
+      snapshot:DEPARTMENTS.map(d=>({dept:d.id,label:d.label,icon:d.icon,open:(tasks[d.id]||[]).filter(t=>t.status!=="Done").length,blocked:(tasks[d.id]||[]).filter(t=>t.status==="Blocked").length,inprog:(tasks[d.id]||[]).filter(t=>t.status==="In Progress").length})),
+      createdAt:new Date().toISOString()};
+    setHandovers(p=>[h,...p]);setSaved(true);setTimeout(()=>setSaved(false),3000);
+  }
+  return(
+    <div style={{padding:"16px 20px"}}>
+      <div style={{fontWeight:800,fontSize:16,color:th.text,marginBottom:4}}>📋 Shift Handover</div>
+      <div style={{fontSize:12,color:th.text3,marginBottom:18}}>Document shift transitions with open task snapshots and agent handoff details.</div>
+      <div style={{background:th.surface,border:`1.5px solid ${BRAND.purple}44`,borderRadius:16,padding:"20px",marginBottom:24,position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:BRAND.grad1}}/>
+        <div style={{fontWeight:700,fontSize:13,color:th.text,marginBottom:14}}>✍️ New Handover</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10,marginBottom:14}}>
+          <Fld label="Date" th={th}><input type="date" value={form.date} onChange={e=>setF("date",e.target.value)} style={inp}/></Fld>
+          <Fld label="Shift" th={th}><select value={form.shift} onChange={e=>setF("shift",e.target.value)} style={inp}>{SHIFTS.map(s=><option key={s}>{s}</option>)}</select></Fld>
+          <Fld label="Outgoing Agent" th={th}><input value={form.outgoing} onChange={e=>setF("outgoing",e.target.value)} placeholder="Name…" style={inp}/></Fld>
+          <Fld label="Incoming Agent" th={th}><input value={form.incoming} onChange={e=>setF("incoming",e.target.value)} placeholder="Name…" style={inp}/></Fld>
+        </div>
+        <div style={{fontWeight:700,fontSize:11,color:th.text3,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Live Dept Snapshot</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:8,marginBottom:14}}>
+          {DEPARTMENTS.map(d=>{
+            const open=(tasks[d.id]||[]).filter(t=>t.status!=="Done").length;
+            const blocked=(tasks[d.id]||[]).filter(t=>t.status==="Blocked").length;
+            const inprog=(tasks[d.id]||[]).filter(t=>t.status==="In Progress").length;
+            return(
+              <div key={d.id} style={{background:th.surface2,border:`1.5px solid ${blocked>0?BRAND.red+"44":th.border}`,borderRadius:12,padding:"10px 12px"}}>
+                <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:6}}>{d.icon} {d.label}</div>
+                <div style={{display:"flex",gap:8,fontSize:11,marginBottom:6}}>
+                  <span style={{color:BRAND.blue,fontWeight:600}}>⏳{inprog}</span>
+                  <span style={{color:BRAND.red,fontWeight:600}}>🚫{blocked}</span>
+                  <span style={{color:th.text3}}>/{open} open</span>
+                </div>
+                <textarea value={form.deptNotes[d.id]||""} onChange={e=>setDN(d.id,e.target.value)} placeholder="Notes for incoming…" rows={2}
+                  style={{...inp,padding:"5px 8px",fontSize:11,resize:"none"}}/>
+              </div>
+            );
+          })}
+        </div>
+        <Fld label="General Handover Notes" th={th}><textarea value={form.notes} onChange={e=>setF("notes",e.target.value)} rows={3} placeholder="Key items, pending escalations, urgent follow-ups…" style={{...inp,resize:"vertical"}}/></Fld>
+        <div style={{display:"flex",gap:10,marginTop:14,alignItems:"center"}}>
+          <button onClick={save} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:10,padding:"9px 22px",fontWeight:800,fontSize:13,cursor:"pointer",boxShadow:`0 4px 14px ${BRAND.purple}44`}}>💾 Save Handover</button>
+          {saved&&<span style={{color:BRAND.green,fontSize:13,fontWeight:700}}>✅ Saved!</span>}
+        </div>
+      </div>
+      {handovers.length>0&&(
+        <>
+          <div style={{fontWeight:700,fontSize:13,color:th.text,marginBottom:12}}>📁 History ({handovers.length})</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {handovers.map(h=>(
+              <div key={h.id} style={{background:th.surface,border:`1.5px solid ${th.border}`,borderRadius:14,padding:"14px 16px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,flexWrap:"wrap",gap:8}}>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{fontWeight:800,fontSize:13,color:th.text}}>📅 {h.date}</span>
+                    <Bdg color={BRAND.purple} sm>{h.shift} Shift</Bdg>
+                    {h.blockedCount>0&&<Bdg color={BRAND.red} sm>🚫 {h.blockedCount} Blocked</Bdg>}
+                  </div>
+                  <div style={{fontSize:11,color:th.text3}}>{h.outgoing&&<span>👤 {h.outgoing} → </span>}<span style={{color:th.text,fontWeight:700}}>{h.incoming}</span></div>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:h.notes?8:0}}>
+                  {(h.snapshot||[]).map(s=>(
+                    <div key={s.dept} style={{background:th.surface2,borderRadius:8,padding:"4px 10px",fontSize:11,border:`1px solid ${th.border}`}}>
+                      <span style={{color:th.text}}>{s.icon}</span>
+                      <span style={{color:BRAND.blue,marginLeft:4,fontWeight:600}}>{s.inprog}▶</span>
+                      <span style={{color:BRAND.red,marginLeft:3,fontWeight:600}}>{s.blocked}🚫</span>
+                    </div>
+                  ))}
+                </div>
+                {h.notes&&<div style={{fontSize:12,color:th.text2,fontStyle:"italic",marginTop:6}}>💬 {h.notes}</div>}
+                <div style={{fontSize:10,color:th.text3,marginTop:6}}>{new Date(h.createdAt).toLocaleString()}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── CAMPAIGNS ────────────────────────────────────────────────────────────────
+function CampaignsView({th,inp,campaigns,onAdd,onEdit,campModal,setCampModal,onAddCamp,onUpdCamp,onDelCamp,onRemoveAll,onBulkUpload,bulkCampModal,setBulkCampModal,onBulkAdd,tasks,setTasks,onImportExport,isMobile}){
+  return(
+    <div style={{padding:isMobile?"14px 16px":"16px 20px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <div><div style={{fontWeight:800,fontSize:16,color:th.text}}>🚀 Campaign Tracker</div><div style={{fontSize:11,color:th.text3}}>Planning → Closed · Full lifecycle management</div></div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={()=>onImportExport({mode:"import",type:"campaigns",data:campaigns,onImport:(importedCampaigns)=>{onBulkAdd(importedCampaigns);}})} style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:"9px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>📥 Import</button>
+          <button onClick={()=>onImportExport({mode:"export",type:"campaigns",data:campaigns})} style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:"9px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>📤 Export</button>
+          <button onClick={onBulkUpload} style={{background:th.surface2,color:BRAND.purple,border:`1.5px solid ${BRAND.purple}`,borderRadius:10,padding:"9px 16px",fontWeight:700,fontSize:12,cursor:"pointer"}}>📦 Bulk Upload</button>
+          {campaigns.length>0&&<button onClick={onRemoveAll} style={{background:BRAND.red+"20",color:BRAND.red,border:`1.5px solid ${BRAND.red}`,borderRadius:10,padding:"9px 16px",fontWeight:700,fontSize:12,cursor:"pointer"}}>🗑️ Remove All</button>}
+          <button onClick={onAdd} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:10,padding:"9px 20px",fontWeight:700,fontSize:12,cursor:"pointer",boxShadow:`0 4px 14px ${BRAND.purple}44`}}>+ New Campaign</button>
+        </div>
+      </div>
+      {campaigns.length===0&&<div style={{textAlign:"center",padding:"64px",color:th.text3}}>No campaigns yet.</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:14}}>
+        {campaigns.map(c=>{const ai=c.checklist.flatMap(p=>p.items);const done=ai.filter(i=>i.done).length;const pct=ai.length?Math.round(done/ai.length*100):0;return(
+          <div key={c.id} onClick={()=>onEdit(c)} style={{background:th.surface,border:`1.5px solid ${th.border}`,borderRadius:16,padding:"16px",cursor:"pointer",transition:"all .2s",position:"relative",overflow:"hidden"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=BRAND.purple;e.currentTarget.style.boxShadow=`0 8px 30px ${BRAND.purple}33`;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=th.border;e.currentTarget.style.boxShadow="none";}}>
+            <div style={{position:"absolute",top:0,left:0,right:0,height:4,background:BRAND.grad1}}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,paddingTop:4}}>
+              <div style={{fontWeight:800,fontSize:14,color:th.text}}>{c.name||"Untitled"}</div>
+              <Bdg color={PHC[c.phase]} sm>{c.phase}</Bdg>
+            </div>
+            <div style={{display:"flex",gap:8,fontSize:11,color:th.text3,marginBottom:10,flexWrap:"wrap"}}>
+              <Bdg color={MKC[c.market]||BRAND.purple} sm>{c.market}</Bdg>
+              {c.client&&<span>🏢 {c.client}</span>}
+              {c.budget&&<span>💰 {Number(c.budget).toLocaleString()} EGP</span>}
+              {c.startDate&&<span>📅 {c.startDate}</span>}
+            </div>
+            <div style={{background:th.border,borderRadius:6,height:6,overflow:"hidden",marginBottom:6}}>
+              <div style={{height:"100%",width:`${pct}%`,background:pct===100?BRAND.gradGreen:BRAND.grad1,borderRadius:6}}/>
+            </div>
+            <div style={{fontSize:10,color:th.text3,fontWeight:600}}>{done}/{ai.length} items · {pct}%</div>
+            <div style={{display:"flex",gap:3,marginTop:10}}>
+              {c.checklist.map(p=>{const pd=p.items.every(i=>i.done);const pa=p.phase===c.phase;return<div key={p.phase} title={p.phase} style={{flex:1,height:4,borderRadius:3,background:pd?BRAND.green:pa?BRAND.purple:th.border}}/>;})}</div>
+          </div>
+        );})}
+      </div>
+      {campModal&&<CampModal modal={campModal} th={th} inp={inp} onChange={c=>setCampModal(p=>({...p,camp:c}))} onSave={()=>campModal.mode==="add"?onAddCamp(campModal.camp):onUpdCamp(campModal.camp)} onDelete={()=>onDelCamp(campModal.camp.id)} onClose={()=>setCampModal(null)}/>}
+      {bulkCampModal&&<BulkCampaignModal modal={bulkCampModal} th={th} inp={inp} campaigns={campaigns} setModal={setBulkCampModal} onBulkAdd={onBulkAdd} tasks={tasks} setTasks={setTasks} DEPARTMENTS={DEPARTMENTS} CAMP_TEMPLATE={CAMP_TEMPLATE} uid={uid} isMobile={isMobile}/>}
+    </div>
+  );
+}
+function CampModal({modal,th,inp,onChange,onSave,onDelete,onClose}){
+  const c=modal.camp;const set=(k,v)=>onChange({...c,[k]:v});const isEdit=modal.mode==="edit";
+  const toggleItem=(pi,id)=>onChange({...c,checklist:c.checklist.map((p,i)=>i!==pi?p:{...p,items:p.items.map(it=>it.id===id?{...it,done:!it.done}:it)})});
+  const addItem=pi=>onChange({...c,checklist:c.checklist.map((p,i)=>i!==pi?p:{...p,items:[...p.items,{id:uid(),text:"",done:false}]})});
+  const updItem=(pi,id,txt)=>onChange({...c,checklist:c.checklist.map((p,i)=>i!==pi?p:{...p,items:p.items.map(it=>it.id===id?{...it,text:txt}:it)})});
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000cc",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:th.surface,borderRadius:18,width:"100%",maxWidth:640,maxHeight:"93vh",overflowY:"auto",padding:24,border:`1.5px solid ${BRAND.purple}44`,boxShadow:`0 24px 80px ${BRAND.purple}33`}}>
+        <div style={{height:4,background:BRAND.grad1,borderRadius:"18px 18px 0 0",margin:"-24px -24px 18px"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <span style={{fontWeight:800,fontSize:15,color:th.text}}>{isEdit?"Edit":"New"} Campaign</span>
+          <button onClick={onClose} style={{background:"none",border:"none",color:th.text3,fontSize:22,cursor:"pointer"}}>✕</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Fld label="Campaign Name" th={th}><input value={c.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. KSA Summer Activation Q2" style={inp}/></Fld>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <Fld label="Client" th={th}><input value={c.client||""} onChange={e=>set("client",e.target.value)} style={inp}/></Fld>
+            <Fld label="Market" th={th}><select value={c.market} onChange={e=>set("market",e.target.value)} style={inp}>{MARKETS.filter(m=>m!=="ALL").map(m=><option key={m}>{m}</option>)}</select></Fld>
+            <Fld label="Phase" th={th}><select value={c.phase} onChange={e=>set("phase",e.target.value)} style={inp}>{CAMPAIGN_PHASES.map(p=><option key={p}>{p}</option>)}</select></Fld>
+            <Fld label="Budget (EGP)" th={th}><input type="number" value={c.budget||""} onChange={e=>set("budget",e.target.value)} style={inp}/></Fld>
+            <Fld label="Start Date" th={th}><input type="date" value={c.startDate||""} onChange={e=>set("startDate",e.target.value)} style={inp}/></Fld>
+            <Fld label="End Date" th={th}><input type="date" value={c.endDate||""} onChange={e=>set("endDate",e.target.value)} style={inp}/></Fld>
+          </div>
+          <Fld label="Notes" th={th}><textarea value={c.note||""} onChange={e=>set("note",e.target.value)} rows={2} style={{...inp,resize:"vertical"}}/></Fld>
+          {c.checklist.map((ph,pi)=>{const pd=ph.items.filter(i=>i.done).length;return(
+            <div key={ph.phase} style={{background:th.surface2,borderRadius:12,padding:"12px 14px",border:`1.5px solid ${ph.phase===c.phase?BRAND.purple+"66":th.border}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}><Bdg color={PHC[ph.phase]} sm>{ph.phase}</Bdg><span style={{fontSize:11,color:th.text3}}>{pd}/{ph.items.length}</span></div>
+                <button onClick={()=>addItem(pi)} style={{background:"none",border:`1px solid ${th.border2}`,color:BRAND.purple,borderRadius:6,padding:"2px 8px",fontSize:10,cursor:"pointer",fontWeight:700}}>+ Add</button>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                {ph.items.map(item=>(
+                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div onClick={()=>toggleItem(pi,item.id)} style={{width:14,height:14,borderRadius:4,border:`2px solid ${item.done?BRAND.green:th.border2}`,background:item.done?BRAND.green:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {item.done&&<span style={{color:"#fff",fontSize:9,fontWeight:900}}>✓</span>}
+                    </div>
+                    <input value={item.text} onChange={e=>updItem(pi,item.id,e.target.value)} style={{...inp,flex:1,padding:"4px 8px",fontSize:11,background:"transparent",border:"none",borderBottom:`1px solid ${th.border}`,borderRadius:0,color:item.done?BRAND.green:th.text2,textDecoration:item.done?"line-through":"none"}}/>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );})}
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:18,justifyContent:"flex-end"}}>
+          {isEdit&&<button onClick={onDelete} style={{background:`${BRAND.red}18`,color:BRAND.red,border:`1px solid ${BRAND.red}44`,borderRadius:9,padding:"8px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}>Delete</button>}
+          <button onClick={onClose} style={{background:th.surface2,color:th.text3,border:`1px solid ${th.border}`,borderRadius:9,padding:"8px 14px",fontWeight:600,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onSave} style={{background:BRAND.grad1,color:"#fff",border:"none",borderRadius:9,padding:"8px 22px",fontWeight:800,fontSize:12,cursor:"pointer",boxShadow:`0 4px 14px ${BRAND.purple}44`}}>{isEdit?"Save":"Create"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── USER MANUAL MODAL ────────────────────────────────────────────────────────
+function UserManualModal({th,onClose,isMobile}){
+  const[activeTab,setActiveTab]=useState("overview");
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:400,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:16,paddingTop:isMobile?"env(safe-area-inset-top)":0,paddingBottom:isMobile?"env(safe-area-inset-bottom)":0}}>
+      <div style={{background:th.surface,borderRadius:isMobile?"24px 24px 0 0":18,width:"100%",maxWidth:isMobile?"100%":900,maxHeight:isMobile?"90vh":"92vh",overflowY:"auto",padding:isMobile?20:28,border:`1.5px solid ${BRAND.blue}44`,boxShadow:`0 24px 80px ${BRAND.blue}33`}}>
+        <div style={{height:4,background:`linear-gradient(135deg,${BRAND.blue} 0%,${BRAND.teal} 100%)`,borderRadius:isMobile?"24px 24px 0 0":"18px 18px 0 0",margin:isMobile?"-20px -20px 20px":"-28px -28px 24px"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:32}}>📖</span>
+            <div>
+              <div style={{fontWeight:900,fontSize:isMobile?18:22,color:th.text}}>TryGC OPS User Manual</div>
+              <div style={{fontSize:12,color:th.text3,marginTop:2}}>Comprehensive guide for all system features</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:th.text3,fontSize:24,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+
+        <div style={{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}>
+          {["overview","tasks","campaigns","agents","reports","sla","waban","handover"].map(tab=>(
+            <button key={tab} onClick={()=>setActiveTab(tab)} style={{background:activeTab===tab?BRAND.blue:th.surface2,color:activeTab===tab?"#fff":th.text2,border:`1.5px solid ${activeTab===tab?BRAND.blue:th.border}`,borderRadius:10,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",textTransform:"capitalize"}}>
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        <div style={{background:th.surface2,borderRadius:16,padding:isMobile?16:20,border:`1.5px solid ${th.border}`}}>
+          {activeTab==="overview"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>System Overview</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>TryGC OPS COMMAND CENTER is a comprehensive operations management system for Egypt & GCC Regional Operations across 10 departments. The platform manages department-based task management, campaign tracking, agent performance monitoring, and SLA breach alerts.</p>
+              <div style={{display:"grid",gap:12}}>
+                <div style={{background:th.surface,padding:14,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:13,color:BRAND.purple,marginBottom:6}}>🎯 Key Features</div>
+                  <ul style={{fontSize:12,color:th.text2,lineHeight:1.8,paddingLeft:20,margin:0}}>
+                    <li>Multi-department task management with real-time progress tracking</li>
+                    <li>Campaign lifecycle tracking from Planning to Closed</li>
+                    <li>Agent performance monitoring with daily targets (50/agent/day)</li>
+                    <li>SLA breach prevention with automated alerts</li>
+                    <li>WhatsApp ban prevention scoring system</li>
+                    <li>Shift handover documentation and history</li>
+                  </ul>
+                </div>
+                <div style={{background:th.surface,padding:14,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:13,color:BRAND.teal,marginBottom:6}}>📊 Data Management</div>
+                  <ul style={{fontSize:12,color:th.text2,lineHeight:1.8,paddingLeft:20,margin:0}}>
+                    <li>CSV & Excel import/export for tasks, campaigns, and agents</li>
+                    <li>PDF report generation with custom filters</li>
+                    <li>Inline editing with comprehensive modal forms</li>
+                    <li>Bulk upload capabilities for campaigns</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="tasks"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>Task Management</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Manage tasks across 10 departments with full lifecycle tracking, priority management, and progress monitoring.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>➕ Creating Tasks</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Click the "+ New Task" button in any department view. Fill in title, assignee, priority, status, due date, and add subtasks as needed.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>✏️ Editing Tasks</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Click on any task card to open the edit modal. Update progress slider, change status, modify assignees, or link to campaigns.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>📋 Task Properties</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Title, Sub-area, Assignee, Market (KSA/UAE/Egypt/Kuwait/ALL), Priority (High/Medium/Low), Status (Open/In Progress/Blocked/Done), Progress (0-100%), Due Date, Campaign Link, Notes, Subtasks</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="campaigns"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>Campaign Tracker</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Track campaign lifecycle from Planning through Execution, Monitoring, Reporting, to Closed with integrated checklist management.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>🚀 Campaign Phases</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Planning to Execution to Monitoring to Reporting to Closed. Each phase has customizable checklist items.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>📦 Bulk Upload</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Use "Bulk Upload" button to create multiple campaigns at once. Enter line-separated campaign names.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>🔗 Campaign-Task Linking</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Link tasks to campaigns from the task edit modal. View all linked tasks in the campaign detail view.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="agents"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>Agent Performance</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Monitor agent performance with daily onboarding targets (50/agent/day), quality scores, and daily count logging.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>👥 Adding Agents</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Enter agent name, select market, department, and quality score (0-100). Agent cards show today's count, total count, and quality metrics.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>📝 Daily Logging</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Click "Log Today's Counts" to record daily onboarding numbers for all agents. System tracks against 50/agent/day target.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>✏️ Inline Editing</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Click any agent card to open edit modal. Update all fields, add notes, or delete agents.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="reports"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>Reports & Analytics</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Generate detailed reports with custom filters, export to CSV/Excel/PDF, and analyze performance across departments.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>🔍 Filtering</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Filter by Department, Market, Priority, Status, Date Range, Assignee, and Campaign to generate custom reports.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>📤 Export Options</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Export filtered results to CSV, Excel (XLSX), or PDF format. Desktop users have quick-access export buttons.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="sla"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>SLA Breach Monitor</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Track tasks at risk of SLA breaches with automated countdown timers and escalation alerts.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>⏱️ Timer System</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Each task shows countdown timer based on due date. System highlights tasks with less than 24h, 6h, and 1h remaining.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>🚨 Breach Alerts</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Tasks that pass due date show as "BREACHED" in red. System tracks breach count per department.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="waban"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>WhatsApp Ban Prevention</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Monitor WhatsApp usage patterns and prevent account bans with automated risk scoring.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>📊 Risk Scoring</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>System scores 8 risk factors: Mass messages, Repetitive content, Suspicious links, High frequency, User reports, etc. Score 0-2: LOW, 3-4: MODERATE, 5+: HIGH RISK.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>✅ Best Practices</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Toggle checkboxes to confirm compliance: Personalized messages, Response time under 5min, Shift rotation, Verified account, etc.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {activeTab==="handover"&&(
+            <div>
+              <h3 style={{fontSize:16,fontWeight:800,color:th.text,marginBottom:12}}>Shift Handover</h3>
+              <p style={{fontSize:13,color:th.text2,lineHeight:1.7,marginBottom:16}}>Document shift transitions with live task snapshots, department-specific notes, and agent handoff tracking.</p>
+              <div style={{display:"grid",gap:10}}>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>📋 Creating Handovers</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>Select date, shift (Morning/Evening/Night), enter outgoing/incoming agent names. System auto-captures live task snapshot for all departments.</p>
+                </div>
+                <div style={{background:th.surface,padding:12,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontWeight:700,fontSize:12,color:th.text,marginBottom:4}}>🗂️ Handover History</div>
+                  <p style={{fontSize:11,color:th.text2,lineHeight:1.6,margin:0}}>View all past handovers with full snapshots showing open, blocked, and in-progress tasks per department at time of handover.</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{marginTop:20,padding:16,background:BRAND.blue+"15",border:`1.5px solid ${BRAND.blue}44`,borderRadius:12}}>
+          <div style={{fontWeight:700,fontSize:13,color:BRAND.blue,marginBottom:8}}>💡 Pro Tips</div>
+          <ul style={{fontSize:12,color:th.text2,lineHeight:1.8,paddingLeft:20,margin:0}}>
+            <li>Use keyboard shortcuts: Desktop navigation supports quick clicks for all views</li>
+            <li>Mobile: Access hamburger menu (☰) for full navigation and export options</li>
+            <li>Link tasks to campaigns for better tracking and reporting</li>
+            <li>Log agent counts daily before end-of-shift for accurate performance tracking</li>
+            <li>Check SLA Monitor regularly to prevent breaches</li>
+            <li>Use bulk upload for faster campaign creation</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SOP MODAL ────────────────────────────────────────────────────────────────
+function SOPModal({th,onClose,isMobile}){
+  const[activeRole,setActiveRole]=useState("onboarding");
+
+  const roles = [
+    {id:"onboarding",name:"Onboarding",icon:"👥",color:BRAND.purple},
+    {id:"livechat",name:"Live Chat",icon:"💬",color:BRAND.blue},
+    {id:"coverage",name:"Coverage",icon:"📸",color:BRAND.teal},
+    {id:"coordination",name:"Coordination",icon:"🔗",color:BRAND.indigo},
+    {id:"quality",name:"Quality",icon:"⭐",color:BRAND.amber},
+    {id:"systems",name:"Systems",icon:"⚙️",color:BRAND.violet},
+    {id:"activation",name:"Activation",icon:"🔥",color:BRAND.magenta},
+    {id:"accountmgr",name:"Account Managers",icon:"🎯",color:BRAND.green},
+  ];
+
+  const roleData = {
+    onboarding:{
+      title:"Onboarding Department",
+      titleAr:"قسم الانضمام",
+      responsibilities:[
+        {en:"Add new influencers daily and ensure full profile completion",ar:"إضافة المؤثرين الجدد يومياً والتأكد من اكتمال ملفاتهم"},
+        {en:"Monthly target increases: 50/day to 75/day to 100/day",ar:"زيادة التارجت الشهري تدريجياً"},
+        {en:"Ensure influencers update data via system or app",ar:"ضمان تحديث بيانات المؤثرين عبر النظام أو التطبيق"},
+        {en:"Add lookalike influencers based on client campaigns",ar:"إضافة المؤثرين الشبيهين بناءً على حملات العملاء"},
+        {en:"24/7 operation to support continuous onboarding",ar:"العمل على مدار الساعة لدعم الانضمام المستمر"},
+      ],
+      kpis:[
+        {en:"Daily onboarding volume",ar:"عدد المؤثرين الجدد يومياً"},
+        {en:"Data accuracy and profile completion",ar:"دقة البيانات واكتمال الملفات"},
+        {en:"Lookalike match quality",ar:"جودة المؤثرين الشبيهين"},
+      ]
+    },
+    livechat:{
+      title:"Live Chat (WhatsApp)",
+      titleAr:"فريق المحادثة",
+      responsibilities:[
+        {en:"Respond within 3-5 minutes",ar:"الرد خلال 3-5 دقائق"},
+        {en:"24/7 across 3 shifts",ar:"العمل 24 ساعة عبر 3 شفتات"},
+        {en:"Manage confirmations, reminders, visits, coverage",ar:"  دارة التأكيدات والتذكيرات والزيارات والتغطيات"},
+      ],
+      kpis:[
+        {en:"Response time",ar:"زمن الرد"},
+        {en:"Daily handled inquiries",ar:"عدد الاستفسارات اليومية"},
+        {en:"Shift handover accuracy",ar:"دقة التسليم بين الشفتات"},
+      ]
+    },
+    coverage:{
+      title:"Coverage and Monitoring",
+      titleAr:"قسم المتابعة والتغطيات",
+      responsibilities:[
+        {en:"Track influencer content across all platforms",ar:"متابعة التغطيات على جميع المنصات"},
+        {en:"4 checks per day (every 6 hours)",ar:"4 مراجعات يومياً (كل 6 ساعات)"},
+        {en:"Ensure coverage posted within 24 hours",ar:"التأكد من نزول التغطية خلال 24 ساعة"},
+      ],
+      kpis:[
+        {en:"Completion rate",ar:"نسبة الاكتمال"},
+        {en:"Monitoring accuracy",ar:"دقة المتابعة"},
+        {en:"Missing coverage recovery",ar:"معالجة التغطيات الناقصة"},
+      ]
+    },
+    coordination:{
+      title:"Coordination",
+      titleAr:"قسم التنسيق",
+      responsibilities:[
+        {en:"Link between all GC offices",ar:"حلقة الوصل بين جميع المكاتب"},
+        {en:"Reply to clients in 3-5 minutes",ar:"الرد خلال 3-5 دقائق"},
+        {en:"Internal and external communication",ar:"تنسيق داخلي وخارجي"},
+        {en:"Two daily meetings: Morning and End of Day",ar:"اجتماعين يومياً"},
+        {en:"Full shift handover",ar:"تسليم شامل بين الشفتات"},
+      ],
+      kpis:[
+        {en:"Response time",ar:"زمن الرد"},
+        {en:"Accuracy of updates",ar:"دقة التحديثات"},
+        {en:"Zero-error communication",ar:"تواصل بدون أخطاء"},
+      ]
+    },
+    quality:{
+      title:"Quality",
+      titleAr:"قسم الجودة",
+      responsibilities:[
+        {en:"Monitor all departments",ar:"مراقبة كل الأقسام"},
+        {en:"Ensure communication accuracy",ar:"ضمان دقة التواصل"},
+        {en:"Check coverage and onboarding quality",ar:"مراجعة جودة التغطيات والانضمام"},
+        {en:"Provide training",ar:"تقديم التدريب"},
+      ],
+      kpis:[
+        {en:"Quality score",ar:"درجة الجودة"},
+        {en:"Errors caught vs corrected",ar:"الأخطاء المكتشفة مقابل المصححة"},
+        {en:"Training sessions",ar:"جلسات التدريب"},
+      ]
+    },
+    systems:{
+      title:"Systems and Automation",
+      titleAr:"الأنظمة والأتمتة",
+      responsibilities:[
+        {en:"Automate reminders and coverage tracking",ar:"أتمتة التذكيرات والمتابعة"},
+        {en:"Create dashboards for check-ins and performance",ar:"إنشاء لوحات تحكم للأداء"},
+        {en:"Reduce manual work",ar:"تقليل العمل اليدوي"},
+      ],
+      kpis:[
+        {en:"Automation accuracy",ar:"دقة الأتمتة"},
+        {en:"Reduction in manual tasks",ar:"تقليل الجهد اليدوي"},
+        {en:"System uptime",ar:"جاهزية الأنظمة"},
+      ]
+    },
+    activation:{
+      title:"Activation",
+      titleAr:"فريق التفعيل",
+      responsibilities:[
+        {en:"Activate influencers who never worked or inactive for long",ar:"تفعيل المؤثرين الغير نشطين"},
+        {en:"Daily outreach: 1000 influencers",ar:"التواصل مع 1000 مؤثر يومياً"},
+        {en:"Activation rate: 20-30%",ar:"نسبة التفعيل 20-30%"},
+        {en:"Monthly increase: +100",ar:"زيادة شهرية +100 مؤثر"},
+      ],
+      kpis:[
+        {en:"Activation conversion",ar:"معدل التحويل"},
+        {en:"Monthly activations",ar:"التفعيل الشهري"},
+        {en:"Response rate",ar:"معدل الرد"},
+      ]
+    },
+    accountmgr:{
+      title:"Account Managers",
+      titleAr:"مدراء الحسابات",
+      responsibilities:[
+        {en:"Most critical department",ar:"أهم قسم في المنظومة"},
+        {en:"Full responsibility for client targets",ar:"مسؤول عن تحقيق أهداف العميل"},
+        {en:"External communication with clients",ar:"التواصل الخارجي"},
+        {en:"Coordinate delivery across all offices",ar:"ضمان التنفيذ في كل المكاتب"},
+        {en:"Assign by country: KSA, UAE, Kuwait, Egypt",ar:"توزيع حسب الدولة"},
+      ],
+      kpis:[
+        {en:"Target achievement",ar:"تحقيق التارجت"},
+        {en:"Client satisfaction",ar:"رضا العميل"},
+        {en:"Delivery accuracy",ar:"دقة التنفيذ"},
+        {en:"Retention and revenue growth",ar:"نمو الإيرادات واستمرارية العميل"},
+      ]
+    },
+  };
+
+  const current = roleData[activeRole];
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000dd",zIndex:400,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",padding:isMobile?0:16,paddingTop:isMobile?"env(safe-area-inset-top)":0,paddingBottom:isMobile?"env(safe-area-inset-bottom)":0}}>
+      <div style={{background:th.surface,borderRadius:isMobile?"24px 24px 0 0":18,width:"100%",maxWidth:isMobile?"100%":1000,maxHeight:isMobile?"90vh":"92vh",overflowY:"auto",padding:isMobile?20:28,border:`1.5px solid ${BRAND.teal}44`,boxShadow:`0 24px 80px ${BRAND.teal}33`}}>
+        <div style={{height:4,background:`linear-gradient(135deg,${BRAND.teal} 0%,${BRAND.green} 100%)`,borderRadius:isMobile?"24px 24px 0 0":"18px 18px 0 0",margin:isMobile?"-20px -20px 20px":"-28px -28px 24px"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:32}}>📋</span>
+            <div>
+              <div style={{fontWeight:900,fontSize:isMobile?18:22,color:th.text}}>SOP & Role Descriptions</div>
+              <div style={{fontSize:12,color:th.text3,marginTop:2}}>Grand Community Operations Structure - الهيكل الكامل للعمليات</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:th.text3,fontSize:24,cursor:"pointer",lineHeight:1}}>✕</button>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginBottom:24}}>
+          {roles.map(role=>(
+            <button key={role.id} onClick={()=>setActiveRole(role.id)} style={{background:activeRole===role.id?role.color:th.surface2,color:activeRole===role.id?"#fff":th.text2,border:`1.5px solid ${activeRole===role.id?role.color:th.border}`,borderRadius:12,padding:isMobile?"10px 8px":"12px",fontSize:isMobile?11:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4,transition:"all .2s"}} onMouseEnter={e=>{if(activeRole!==role.id){e.currentTarget.style.background=role.color+"22";e.currentTarget.style.borderColor=role.color;}}} onMouseLeave={e=>{if(activeRole!==role.id){e.currentTarget.style.background=th.surface2;e.currentTarget.style.borderColor=th.border;}}}>
+              <span style={{fontSize:isMobile?18:20}}>{role.icon}</span>
+              <span style={{textAlign:"center",lineHeight:1.2}}>{role.name}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{background:th.surface2,borderRadius:16,padding:isMobile?16:24,border:`1.5px solid ${th.border}`}}>
+          <div style={{marginBottom:20}}>
+            <h2 style={{fontSize:isMobile?18:22,fontWeight:900,color:th.text,margin:0,marginBottom:4}}>{roles.find(r=>r.id===activeRole)?.icon} {current.title}</h2>
+            <h3 style={{fontSize:isMobile?14:16,fontWeight:700,color:th.text3,margin:0,fontFamily:"Arial"}}>{current.titleAr}</h3>
+          </div>
+
+          <div style={{marginBottom:24}}>
+            <div style={{fontWeight:800,fontSize:14,color:th.text,marginBottom:12,textTransform:"uppercase",letterSpacing:"0.05em"}}>📌 Responsibilities - المسؤوليات</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {current.responsibilities.map((resp,i)=>(
+                <div key={i} style={{background:th.surface,padding:14,borderRadius:10,border:`1px solid ${th.border}`}}>
+                  <div style={{fontSize:13,color:th.text,fontWeight:600,marginBottom:4}}>• {resp.en}</div>
+                  <div style={{fontSize:12,color:th.text3,fontFamily:"Arial"}}>• {resp.ar}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontWeight:800,fontSize:14,color:th.text,marginBottom:12,textTransform:"uppercase",letterSpacing:"0.05em"}}>📊 KPIs - مؤشرات الأداء</div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fit,minmax(240px,1fr))",gap:10}}>
+              {current.kpis.map((kpi,i)=>(
+                <div key={i} style={{background:roles.find(r=>r.id===activeRole)?.color+"15",padding:14,borderRadius:10,border:`1.5px solid ${roles.find(r=>r.id===activeRole)?.color}44`}}>
+                  <div style={{fontSize:12,color:th.text,fontWeight:700,marginBottom:3}}>{kpi.en}</div>
+                  <div style={{fontSize:11,color:th.text3,fontFamily:"Arial"}}>{kpi.ar}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={{marginTop:20,padding:16,background:BRAND.teal+"15",border:`1.5px solid ${BRAND.teal}44`,borderRadius:12}}>
+          <div style={{fontWeight:700,fontSize:13,color:BRAND.teal,marginBottom:8}}>🌍 Grand Community - Full Operations Structure</div>
+          <p style={{fontSize:12,color:th.text2,lineHeight:1.7,margin:0}}>This SOP covers all 8 operational departments for Egypt and GCC Regional Operations. Each department works in coordination with Account Managers (the most critical department) to ensure client target achievement, quality delivery, and zero-error communication across all GC offices (KSA, UAE, Kuwait, Egypt).</p>
+        </div>
+      </div>
+    </div>
+  );
+}

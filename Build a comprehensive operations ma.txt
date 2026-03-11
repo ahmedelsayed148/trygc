@@ -1,0 +1,551 @@
+Build a comprehensive operations management dashboard for Egypt & GCC Regional Operations with the following specifications:
+
+## TECH STACK
+- React 18+ with TypeScript
+- React Router (Data mode pattern with RouterProvider)
+- Tailwind CSS v4
+- Lucide React icons
+- LocalStorage for data persistence
+- Recharts for analytics/charts
+- Motion (motion/react) for animations
+- react-hook-form@7.55.0 for forms
+- Additional libraries: date-fns, xlsx, file-saver, jspdf
+
+## DESIGN SYSTEM
+### Color Scheme
+- Primary: Purple/Violet gradient theme (#8B5CF6 to #6366F1)
+- Background (Light): #F9FAFB
+- Background (Dark): #0F172A
+- Cards (Light): White with subtle shadows
+- Cards (Dark): #1E293B
+- Text (Light): #1F2937
+- Text (Dark): #F1F5F9
+- Accent colors: Success (#10B981), Warning (#F59E0B), Error (#EF4444), Info (#3B82F6)
+
+### Theme Toggle
+- Dark/Light mode switcher in header
+- Persist theme preference in LocalStorage
+- Smooth transitions between themes
+
+## CORE ARCHITECTURE
+
+### State Management
+- AppContext with React Context API
+- Custom hooks: useLocalStorage, useDebounce, useMediaQuery, useKeyboardShortcut
+- Persistent state in LocalStorage for: campaigns, agents, tasks, activities, settings, theme
+
+### Routing Structure (React Router)
+```javascript
+Routes:
+/ - Overview Dashboard
+/operations - Operations View
+/campaigns - Campaigns View
+/agents - Agents View
+/sla - SLA Monitor
+/wa-shield - WhatsApp Shield
+/handover - Handover View
+/settings - Settings (with 8 tabs)
+DATA MODELS
+Campaign
+{
+  id: string
+  name: string
+  department: DepartmentType
+  status: 'Planning' | 'Active' | 'Paused' | 'Completed' | 'Archived'
+  priority: 'Low' | 'Medium' | 'High' | 'Critical'
+  assignedAgent: string
+  startDate: Date
+  endDate: Date
+  budget: number
+  spent: number
+  leads: number
+  conversions: number
+  roi: number
+  tags: string[]
+  notes: string
+  createdAt: Date
+  updatedAt: Date
+  createdBy: string
+}
+Department Types (10 total)
+'Sales' | 'Customer Support' | 'Marketing' | 'Technical Support' | 
+'Operations' | 'Quality Assurance' | 'Training' | 'Analytics' | 
+'Compliance' | 'Business Development'
+Agent
+{
+  id: string
+  name: string
+  email: string
+  role: 'Admin' | 'Manager' | 'Agent' | 'Viewer'
+  department: DepartmentType
+  status: 'Active' | 'Inactive' | 'On Leave'
+  performance: number (0-100)
+  tasksCompleted: number
+  activeCampaigns: number
+  avatar: string
+  joinedDate: Date
+  lastLogin: Date
+  permissions: string[]
+}
+Task
+{
+  id: string
+  title: string
+  description: string
+  campaignId: string
+  assignedTo: string
+  status: 'Pending' | 'In Progress' | 'Completed' | 'Blocked'
+  priority: 'Low' | 'Medium' | 'High' | 'Critical'
+  dueDate: Date
+  completedDate?: Date
+  tags: string[]
+}
+SLA Entry
+{
+  id: string
+  campaignId: string
+  metric: string
+  threshold: number
+  current: number
+  status: 'OK' | 'Warning' | 'Breach'
+  lastChecked: Date
+}
+WhatsApp Shield Entry
+{
+  id: string
+  phoneNumber: string
+  campaignId: string
+  riskLevel: 'Low' | 'Medium' | 'High' | 'Critical'
+  messagesSent24h: number
+  spamReports: number
+  blockProbability: number
+  lastActivity: Date
+  recommendations: string[]
+}
+MAIN VIEWS (7 Total)
+1. OVERVIEW DASHBOARD
+Features:
+
+KPI Cards (4): Total Campaigns, Active Agents, Completion Rate, ROI
+Interactive charts: Campaign Status Distribution (Pie), Monthly Performance Trends (Line), Department Activity (Bar)
+Recent Activity Feed (last 10 activities)
+Quick Actions: New Campaign, Assign Task, View Reports, Bulk Import
+Real-time statistics across all departments
+Top performing agents widget
+Upcoming deadlines widget
+2. OPERATIONS VIEW
+Features:
+
+Task Management Board with Kanban-style columns (Pending, In Progress, Completed, Blocked)
+Drag-and-drop task cards
+Filter by: Department, Agent, Priority, Date Range
+Search tasks by title/description
+Quick task creation modal
+Bulk task assignment
+Task details sidebar with comments/attachments
+Export task reports (CSV, Excel, PDF)
+3. CAMPAIGNS VIEW
+Core Features:
+
+Comprehensive campaigns table with columns: Name, Department, Status, Priority, Agent, Progress, Budget, ROI, Actions
+Advanced filtering: Department, Status, Priority, Agent, Date Range, Tags
+Search by campaign name
+Sorting on all columns
+Pagination (customizable page size: 10/25/50/100)
+Bulk Operations:
+
+Bulk Import from Excel (.xlsx) with template download
+Bulk Export (CSV, Excel, PDF)
+Bulk Assignment: Select multiple campaigns, assign to agent with department filtering
+Bulk Status Update
+Bulk Delete with confirmation
+Campaign Lifecycle:
+
+Status badges with color coding
+Progress bars
+Budget vs Spent visualization
+ROI indicators
+Campaign details modal with full metrics
+Actions:
+
+Edit campaign (modal form)
+Delete campaign (confirmation)
+View analytics
+Clone campaign
+Archive campaign
+4. AGENTS VIEW
+Features:
+
+Agent cards grid with avatars, name, role, department, status
+Performance metrics per agent
+Active campaigns count
+Tasks completed count
+Filter by: Department, Role, Status
+Search agents
+Agent details modal: Full profile, campaign history, performance charts
+Add/Edit/Delete agents
+Bulk user operations
+Export agent reports
+5. SLA MONITOR
+Features:
+
+Real-time SLA tracking dashboard
+Breach alerts with severity levels
+SLA metrics table: Campaign, Metric, Threshold, Current, Status, Time to Breach
+Filter by: Department, Status, Severity
+Alert notifications for breaches
+SLA history charts
+Configurable thresholds
+Automated alert emails (settings)
+Export SLA reports
+6. WA SHIELD (WhatsApp Ban Prevention)
+Features:
+
+Risk dashboard with phone numbers at risk
+Risk level indicators (Low/Medium/High/Critical)
+Message volume monitoring (24h window)
+Spam report tracking
+Block probability calculator
+Recommendations engine
+Phone number quarantine
+Filter by: Campaign, Risk Level, Department
+Export risk reports
+Auto-pause campaigns at high risk
+WhatsApp best practices guide
+7. HANDOVER VIEW
+Features:
+
+Shift handover management
+Current shift summary
+Pending handover items
+Notes and context transfer
+Agent availability calendar
+Handover checklist
+Historical handover logs
+Search and filter handovers
+Export handover reports
+ENHANCED COMPONENTS (10 Total)
+1. CommandPalette
+Keyboard shortcut: Cmd/Ctrl + K
+Quick navigation to all views
+Quick actions: Create campaign, Add agent, Search
+Recent items
+Fuzzy search
+Dark mode support
+2. NotificationToast
+Success, error, warning, info variants
+Auto-dismiss with configurable timeout
+Queue management
+Action buttons
+Slide-in animation
+Position: top-right
+3. AdvancedSearch
+Multi-field search
+Filters: Department, Status, Priority, Date Range, Tags, Agent
+Search suggestions
+Recent searches
+Save search presets
+Clear all filters
+Export search results
+4. BulkActions
+Checkbox selection (select all, select page)
+Selected count display
+Bulk operations dropdown
+Confirmation modals
+Progress indicators
+Undo functionality
+Success/failure notifications
+5. QuickActions
+Floating action button (bottom-right)
+Radial menu on click
+Actions: New Campaign, New Task, New Agent, Import Data, Export Report
+Keyboard shortcuts
+Tooltips
+Smooth animations
+6. ActivityFeed
+Real-time activity stream
+Activity types: Campaign created, Agent assigned, Task completed, Status changed, etc.
+Timestamps (relative time)
+User avatars
+Filter by: Activity type, User, Date range
+Load more pagination
+Export activities
+7. AnalyticsDashboard
+Customizable widgets
+Drag-and-drop layout
+Widget types: KPI, Chart, Table, List
+Date range selector
+Compare periods
+Export analytics
+Save dashboard layouts
+8. MobileBottomSheet
+Mobile-optimized drawer
+Swipe to dismiss
+Filter and sort options
+Quick actions
+Smooth animations
+Backdrop overlay
+9. SwipeableCard
+Swipe left: Delete
+Swipe right: Edit/Complete
+Visual feedback
+Configurable actions
+Undo option
+Mobile-friendly
+10. EnhancedFeatures
+Keyboard shortcuts panel (Shift + ?)
+Accessibility features
+Screen reader support
+Focus management
+High contrast mode
+Reduced motion option
+SETTINGS SYSTEM (8 Tabs)
+1. General Settings
+Organization name, logo, timezone
+Default language
+Date/time format
+Currency settings
+Working hours configuration
+Holiday calendar
+Email signature
+Notification preferences
+2. User Management
+Features:
+
+User table: Name, Email, Role, Department, Status, Last Login, Actions
+Add User form: Name, Email, Password, Role, Department, Permissions
+Edit/Delete users
+Bulk user import (Excel)
+Bulk user export (CSV, Excel)
+Password reset functionality
+Last login tracking
+Session management
+User activity logs
+Role-based access control (RBAC)
+Roles & Permissions:
+
+Admin: Full access
+Manager: Department-level access, cannot modify settings
+Agent: View and edit assigned items only
+Viewer: Read-only access
+3. Security Settings
+Password policy: Min length, complexity requirements, expiration
+Two-factor authentication (2FA) toggle
+Session timeout configuration
+IP whitelist/blacklist
+Login attempt limits
+Security audit log
+Data encryption settings
+API key management
+OAuth providers configuration
+4. Data Management
+Features:
+
+Database statistics: Total records, storage used
+Backup & Restore:
+Manual backup (download JSON)
+Automated backups (schedule: daily/weekly/monthly)
+Backup retention policy
+Restore from backup (upload JSON)
+Data export: Full system export (CSV, Excel, JSON)
+Data import: Bulk import with mapping
+Data cleanup: Archive old campaigns, delete orphaned records
+Data validation tools
+5. Automation & Templates
+Campaign Templates:
+
+Pre-configured campaign templates
+Template library (Sales, Support, Marketing, etc.)
+Custom template creation
+Template variables
+Clone templates
+Automation Rules:
+
+Trigger-based actions
+Examples:
+Auto-assign campaigns by department
+Auto-escalate overdue tasks
+Auto-pause high-risk WhatsApp campaigns
+Auto-send SLA breach alerts
+Rule builder with conditions
+Enable/disable rules
+Rule execution log
+Email Templates:
+
+Welcome email, password reset, task assignment, SLA alert, etc.
+Template editor with variables
+HTML email support
+Test email functionality
+6. Integrations & Webhooks
+API Settings:
+
+API key generation
+API documentation link
+Rate limiting configuration
+API usage statistics
+Webhooks:
+
+Webhook URL management
+Event subscriptions (campaign.created, task.completed, etc.)
+Webhook payload customization
+Delivery logs
+Retry configuration
+Test webhook
+Third-party Integrations:
+
+Slack notifications
+Microsoft Teams
+Google Workspace
+Zapier
+WhatsApp Business API
+CRM integrations (Salesforce, HubSpot)
+Configuration forms with API keys
+7. Advanced Settings
+Feature flags: Enable/disable features
+Experimental features toggle
+Debug mode
+Performance monitoring
+Cache management
+Database optimization tools
+Custom CSS/JS injection
+Developer mode
+8. Audit Log
+Features:
+
+Comprehensive activity log
+Columns: Timestamp, User, Action, Resource, Details, IP Address
+Filter by: User, Action type, Date range, Resource type
+Search logs
+Export audit log (CSV, PDF)
+Log retention policy
+Compliance reporting
+IMPORT/EXPORT FUNCTIONALITY
+Excel Import (Campaigns)
+Template download with columns: Name, Department, Status, Priority, AssignedAgent, StartDate, EndDate, Budget, Tags
+File upload with validation
+Preview imported data
+Error handling with row-by-row feedback
+Bulk create campaigns
+Progress indicator
+Export Formats
+CSV Export:
+
+All tables exportable
+Configurable columns
+UTF-8 encoding
+Excel Export:
+
+Formatted spreadsheets
+Multiple sheets support
+Formulas and charts
+Styling
+PDF Export:
+
+Professional reports
+Headers/footers
+Page numbers
+Charts and tables
+Custom branding
+UI/UX REQUIREMENTS
+Header
+Logo and app name
+Navigation menu (7 main views)
+Search bar
+Notifications icon with badge
+Theme toggle
+User profile dropdown (Settings, Logout)
+Responsive Design
+Desktop-first, mobile-optimized
+Breakpoints: sm (640px), md (768px), lg (1024px), xl (1280px)
+Mobile: Bottom navigation, hamburger menu
+Tablet: Adapted layouts
+Touch-friendly buttons (min 44px)
+Loading States
+Skeleton loaders for tables/cards
+Spinner for async operations
+Progress bars for uploads
+Optimistic UI updates
+Error Handling
+Toast notifications for errors
+Inline validation errors
+Friendly error messages
+Retry buttons
+Fallback UI
+Accessibility
+ARIA labels
+Keyboard navigation
+Focus indicators
+Screen reader support
+Color contrast (WCAG AA)
+Skip links
+SAMPLE DATA
+Generate realistic sample data:
+
+50+ campaigns across all departments
+30+ agents with varied roles
+100+ tasks in different statuses
+20+ SLA entries with some breaches
+15+ WhatsApp Shield entries with risk levels
+50+ activity feed entries
+IMPLEMENTATION PRIORITIES
+Core routing and layout
+Data models and LocalStorage persistence
+Overview Dashboard
+Campaigns View with full CRUD
+Agents View
+Operations/Tasks View
+Settings tabs (1-4)
+SLA Monitor
+WhatsApp Shield
+Handover View
+Enhanced components
+Settings tabs (5-8)
+Import/Export functionality
+Polish, animations, accessibility
+CRITICAL REQUIREMENTS
+Use React Router Data mode (RouterProvider, createBrowserRouter)
+All state persists in LocalStorage
+Theme persists across sessions
+All forms use react-hook-form@7.55.0
+Use Motion (from 'motion/react') for animations
+All icons from lucide-react
+Fully responsive mobile/tablet/desktop
+Dark/Light theme support throughout
+Professional gradient purple/violet theme
+Export to CSV, Excel, PDF where specified
+Bulk operations with proper UI feedback
+Search, filter, sort on all major tables
+Real-time statistics and calculations
+SUCCESS CRITERIA
+All 7 main views functional
+All 10 enhanced components working
+All 8 settings tabs complete
+Bulk import/export operational
+LocalStorage persistence working
+Theme toggle functioning
+Mobile responsive
+No console errors
+Professional UI matching theme
+Smooth animations and transitions
+Build this system step by step, ensuring all features are implemented completely.
+
+
+---
+
+## How to Use This Prompt
+
+1. **Copy the entire prompt above** (everything between the code fences)
+2. **Paste into any AI platform:**
+   - Claude (Anthropic)
+   - ChatGPT (OpenAI)
+   - v0.dev (Vercel)
+   - Cursor AI
+   - GitHub Copilot Chat
+   - Any other AI coding assistant
+
+3. **For best results, add:** "Start by creating the project structure, data models, and routing. Then build the Overview Dashboard first to establish the design system."
+
+4. **If the AI asks for clarification**, reference specific sections from the prompt above
+
+This prompt captures all the functionality, features, components, and requirements of your TryGC Ops Management System in a platform-agnostic format!
+home

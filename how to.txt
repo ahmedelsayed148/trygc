@@ -1,0 +1,392 @@
+Build a Campaign Management System with Bulk Upload
+
+## Project Overview
+Create a comprehensive campaign management dashboard for an operational team using React, TypeScript, Tailwind CSS v4, and Supabase backend. The system manages the complete lifecycle of marketing campaigns across multiple markets (Egypt, KSA, UAE, Kuwait, Qatar, Bahrain, Oman).
+
+## Tech Stack Requirements
+- **Frontend**: React 18.3+ with TypeScript
+- **Styling**: Tailwind CSS v4 (using inline classes, no config file)
+- **Routing**: React Router v7 (use 'react-router' package, NOT 'react-router-dom')
+- **Animation**: Motion (from 'motion' package) - import as `import { motion } from 'motion/react'`
+- **Icons**: lucide-react
+- **Toast Notifications**: sonner
+- **Excel/CSV Processing**: xlsx package
+- **Charts**: recharts (if needed for analytics)
+- **Backend**: Supabase Edge Functions with KV store
+
+## Design System
+- **Color Palette**: Strict black & white monochrome with full dark mode support
+  - Light mode: white backgrounds, zinc-50/100 for surfaces, zinc-900 for primary actions
+  - Dark mode: black/zinc-950 backgrounds, zinc-800/900 for surfaces, zinc-100 for primary actions
+- **Typography**: Bold and black font weights throughout (font-bold, font-black)
+- **Borders**: Rounded-2xl and rounded-3xl for major containers, rounded-xl for buttons
+- **Spacing**: Generous padding (p-6, p-7) with consistent gap-3, gap-4
+- **Shadows**: Subtle shadows (shadow-sm, shadow-lg) for depth
+
+## Core Features
+
+### 1. Campaign Manager (`/campaigns` route)
+
+#### Campaign Data Structure
+```typescript
+interface PhaseItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+interface CampaignPhase {
+  name: string;
+  items: PhaseItem[];
+}
+
+interface Campaign {
+  id: string;
+  name: string;              // Required
+  client: string;            // Client/Brand name
+  market: string;            // EGY, KSA, KW, UAE, QAT, BH, OMAN, Multi-Market
+  budget: number;            // Budget in EGP
+  startDate: string;         // ISO date string
+  endDate: string;           // ISO date string
+  currentPhase: string;      // One of 6 phases
+  phases: CampaignPhase[];   // Array of all 6 phases with checklists
+  notes: string;             // Campaign notes
+  createdAt: string;         // ISO timestamp
+}
+6-Phase Campaign Lifecycle
+Each campaign progresses through these phases with pre-built checklists:
+
+Planning
+
+Define campaign objectives & KPIs
+Set budget allocation (EGP)
+Identify target market(s)
+Define influencer criteria (category, size, geo)
+Set campaign timeline & milestones
+Assign campaign owner & core team
+Briefing
+
+Prepare detailed campaign brief
+Get client approval on brief
+Share brief with selected influencers
+Collect influencer participation confirmations
+Get content approval from client
+Brief internal teams (Coverage, Coordination, QA)
+Activation
+
+Send activation messages to all influencers
+Confirm all influencers are active in system
+Distribute app credentials to new influencers
+Upload campaign content & assets to platform
+Brief WhatsApp team on campaign specifics
+Run activation completion report (target: 100%)
+Live
+
+Monitor daily campaign progress vs KPIs
+Track daily CON & COV metrics
+Handle live complaints & escalations in real time
+Send client daily update report
+Flag underperforming influencers to Coverage team
+Daily team standup on campaign status (≤30 min)
+Post-Campaign
+
+Collect final performance data (CON, COV, reach, NPS)
+Conduct NPS survey with all influencers
+Conduct client satisfaction survey
+Prepare comprehensive post-campaign report
+Schedule client debrief presentation meeting
+Identify upsell opportunity for next campaign
+Closed
+
+Archive all campaign data in system
+Process final billing & invoice reconciliation
+Extract key learnings & best practices
+Update campaign playbook with findings
+Client final handshake & thank you
+Log in campaign history tracker
+Campaign Manager UI Components
+Header Section:
+
+Page title: "Campaign Manager"
+Subtitle: "6-Phase Campaign Lifecycle · Trygc Workflow"
+Stats pills showing: Total, Live, Planning, Closed counts
+"Bulk Upload" button (opens bulk upload modal)
+"New Campaign" button (primary action, opens form modal)
+Filter Bar:
+
+Search input (searches campaign name and client)
+Market dropdown filter (All, EGY, KSA, KW, UAE, QAT, BH, OMAN, Multi-Market)
+Phase dropdown filter (All, Planning, Briefing, Activation, Live, Post-Campaign, Closed)
+Phase Summary Bar:
+
+Horizontal row of phase pills showing count of campaigns in each phase
+Clickable to filter by phase
+Campaign Cards: Each card displays:
+
+Campaign name + current phase badge
+Client, market, budget, date range icons
+Overall progress bar (percentage of all checklist items completed)
+Phase pills showing progress for each of 6 phases
+Current phase stats with "Advance Phase" button when current phase is 100% complete
+Expand/collapse button to show phase details
+Edit and delete buttons
+Expanded Card View:
+
+Grid of 6 phase boxes (3 columns on desktop, responsive)
+Each phase box shows:
+Phase name with "CURRENT" badge if active
+Progress bar for that phase
+Checklist items with checkbox toggles
+Line-through styling for completed items
+"Add item" button to add custom checklist items
+Delete button for each item (appears on hover)
+Campaign Form Modal:
+
+Fields: Campaign Name* (required), Client, Market (dropdown), Budget (number), Current Phase (dropdown), Start Date, End Date, Notes (textarea)
+Create/Save button
+Cancel button
+When creating new campaign, auto-generate all 6 phases with default checklists
+Empty State:
+
+Shows when no campaigns exist or filters return no results
+"Create First Campaign" button
+Helpful message
+Phase Legend Footer:
+
+Shows linear progression: Planning → Briefing → Activation → Live → Post-Campaign → Closed
+Explanation text about the workflow
+2. Bulk Upload System
+Bulk Upload Modal Component (CampaignBulkUpload.tsx)
+Features:
+
+3-step wizard: Upload → Preview → Done
+Step indicator (numbered circles 1-2-3)
+Drag-and-drop file zone
+File type support: .xlsx, .xls, .csv
+Template download button with sample data
+Step 1: Upload
+
+Template download card:
+"Need a template?" heading
+"Download Template" button that generates Excel file with:
+Headers: Campaign Name, Client, Market, Budget (EGP), Start Date, End Date, Phase, Notes
+2 sample rows with realistic data
+Drag-drop zone:
+Large upload icon
+"Drag & drop your file here" text
+"or click to browse" subtext
+File type badges (.xlsx, .xls, .csv)
+Highlights when dragging file over
+Error display area (if file parsing fails)
+Column mapping guide showing all accepted column aliases
+Column Mapping Intelligence: The system should auto-detect columns using these aliases (case-insensitive):
+
+Campaign Name: name, campaign name, campaign, title, campaign_name
+Client: client, brand, client/brand, client_brand, advertiser
+Market: market, geo, region, country, markets
+Budget: budget, budget (egp), budget_egp, amount, value, spend
+Start Date: start date, startdate, start, from, start_date, launch date, launch_date
+End Date: end date, enddate, end, to, end_date, finish date, finish_date
+Phase: phase, current phase, current_phase, status, stage, lifecycle
+Notes: notes, note, description, details, comments, remarks
+Step 2: Preview
+
+Summary bar showing:
+File name
+Total rows count badge
+Valid rows count badge (green)
+Error rows count badge (red, if any)
+"Show Errors Only" toggle button
+"Change File" button
+Detected columns display (pills showing found column headers)
+Error warning banner (if invalid rows exist)
+Preview table:
+Columns: #, Name, Client, Market, Budget, Start, End, Phase, Notes, Issues (if errors exist)
+Row highlighting: green/white for valid, red for invalid
+Inline error messages in Issues column
+Market and Phase displayed as pills/badges
+Responsive horizontal scrolling
+Row count indicator
+Validation Rules:
+
+Campaign Name is required (show error if missing)
+Market must be one of: EGY, KSA, KW, UAE, QAT, BH, OMAN, Multi-Market (default to EGY)
+Phase must be one of: Planning, Briefing, Activation, Live, Post-Campaign, Closed (default to Planning)
+Budget should be numeric (default to 0)
+Dates should be normalized to YYYY-MM-DD format (handle Excel serial numbers)
+Step 3: Done
+
+Success icon (large checkmark in circle)
+"{X} Campaign(s) Imported!" heading
+"Your campaigns have been added to the Campaign Manager" message
+Total campaigns count display
+"Upload Another" button
+"Done" button (closes modal)
+Data Processing:
+
+Parse Excel/CSV using xlsx library
+Auto-detect column mapping based on aliases
+Validate each row
+Normalize dates (handle Excel serial date numbers)
+Normalize market and phase values
+Generate unique IDs for each campaign
+Build default phase checklists for each campaign
+Import only valid rows (skip rows with errors but show warning)
+3. Backend Integration
+Supabase Edge Function Endpoints
+Base URL Pattern: https://{projectId}.supabase.co/functions/v1/make-server-{unique-id}/
+
+Required Endpoints:
+
+GET /ops-data - Load campaigns and ops tasks
+
+Returns: { opsCampaigns: Campaign[], opsTasks: any[] }
+POST /ops-campaigns - Save campaigns
+
+Body: { opsCampaigns: Campaign[] }
+Stores in KV store with key "ops_campaigns"
+Authentication:
+
+All requests include header: Authorization: Bearer {publicAnonKey}
+Import credentials from /utils/supabase/info.tsx:
+import { projectId, publicAnonKey } from '../../../utils/supabase/info';
+Auto-Save Behavior:
+
+Debounce saves by 1200ms after any campaign change
+Don't save on initial load (use a ref to track first load)
+Show toast notifications on actions but not on auto-save
+4. Implementation Requirements
+File Structure
+/src/app/components/
+  ├── CampaignsManager.tsx         (Main component)
+  └── CampaignBulkUpload.tsx       (Bulk upload modal)
+
+/src/app/routes.ts                 (Add route)
+Route Configuration
+import { CampaignsManager } from './components/CampaignsManager';
+
+// In router config:
+{ path: "campaigns", Component: CampaignsManager }
+Key Implementation Details
+Never use React.Fragment with props - Figma inspector will break. Use <div className="contents"> instead:
+
+// ❌ WRONG
+<React.Fragment key={item.id}>
+  <span>...</span>
+</React.Fragment>
+
+// ✅ CORRECT
+<div key={item.id} className="contents">
+  <span>...</span>
+</div>
+State Management:
+
+Use React hooks (useState, useEffect, useCallback, useRef)
+Debounced auto-save with useRef for timer
+Track first load to prevent saving initial data
+Animations:
+
+Use Motion for modals (fade in/out, scale)
+Use AnimatePresence for enter/exit animations
+Smooth transitions on expand/collapse
+Form Handling:
+
+Controlled inputs
+Enter key submits forms
+Escape key closes modals
+Click outside modal to close (with confirmation if data entered)
+Toast Notifications:
+
+Success: "Campaign created", "X campaigns imported successfully"
+Errors: Show descriptive error messages
+Don't show for auto-save (silent background operation)
+Responsive Design
+Mobile: Stack filters, single column cards, horizontal scroll for tables
+Tablet: 2-column phase grid
+Desktop: 3-column phase grid, all filters in one row
+Accessibility
+Semantic HTML
+Keyboard navigation support
+Focus states on interactive elements
+ARIA labels where needed
+Screen reader text for icon-only buttons
+5. Excel/CSV Template Generation
+Use xlsx library to generate downloadable template:
+
+import * as XLSX from 'xlsx';
+
+function downloadTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Campaign Name', 'Client', 'Market', 'Budget (EGP)', 'Start Date', 'End Date', 'Phase', 'Notes'],
+    ['Ramadan 2025 - Brand X', 'Brand X', 'EGY', 150000, '2025-03-01', '2025-04-15', 'Planning', 'Focus on stories'],
+    ['KSA Launch Q2', 'Brand Y', 'KSA', 80000, '2025-04-01', '2025-05-30', 'Briefing', ''],
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Campaigns');
+  XLSX.writeFile(wb, 'campaigns_template.xlsx');
+}
+6. Error Handling
+File upload errors (wrong format, empty file, no headers)
+Parsing errors (malformed data)
+Network errors (show retry option)
+Validation errors (display inline in preview table)
+Missing required fields (block import, show specific errors)
+7. UX Polish
+Loading states with spinners
+Empty states with helpful CTAs
+Confirmation dialogs for destructive actions
+Progress indicators
+Smooth animations
+Toast feedback for all actions
+Optimistic UI updates
+Deliverables
+Create these 2 files:
+
+CampaignsManager.tsx - Main campaign management component with:
+
+Campaign list/grid view
+Filters and search
+Campaign cards with expand/collapse
+Campaign form modal
+Phase advancement logic
+Checklist management
+Data persistence
+Integration with bulk upload
+CampaignBulkUpload.tsx - Bulk upload modal with:
+
+3-step wizard
+Drag-drop file upload
+Column mapping
+Data validation
+Preview table
+Error handling
+Template download
+Import functionality
+Both components should be fully typed with TypeScript, follow the monochrome design system, include all animations, and have complete error handling.
+
+Success Criteria
+✅ Users can create campaigns manually via form
+✅ Users can bulk import campaigns from Excel/CSV
+✅ Column mapping works with various header names
+✅ Invalid rows are detected and highlighted
+✅ Each campaign has 6 phases with checklists
+✅ Users can check off checklist items
+✅ Users can add custom checklist items
+✅ Phase advancement works when checklist is complete
+✅ Campaigns filter by market and phase
+✅ Search works across name and client
+✅ All data persists to Supabase backend
+✅ Auto-save works without user intervention
+✅ UI is fully responsive
+✅ Dark mode works perfectly
+✅ No React errors or warnings
+✅ Template download generates proper Excel file
+
+---
+
+**How to use this prompt:**
+1. Copy the entire prompt above
+2. Paste it into Claude, ChatGPT, or any AI coding assistant
+3. The AI will generate both complete components with all features
+4. Adjust the Supabase endpoint URLs and auth details for your project
+5. Install required packages: `xlsx`, `motion`, `lucide-react`, `sonner`, `react-router`, `recharts`
